@@ -1,13 +1,52 @@
-use logos::{Lexer, Logos};
+use std::fmt;
+
+use logos::{Lexer, Logos, Span};
+use miette::{Diagnostic, SourceSpan};
 use regex::Regex;
+use thiserror::Error;
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct LexError(XmlSourceError, Option<Span>);
+
+#[derive(Debug, Error, Diagnostic)]
+#[error("{inner}")]
+#[diagnostic(
+    code(plist_pls::xml),
+    help("this is probably a problem with your plist file")
+)]
+pub struct XmlParseSourceError<'a> {
+    #[source]
+    inner: XmlSourceError,
+    #[source_code]
+    source: &'a str,
+    #[label("Error occurred here")]
+    span: Option<SourceSpan>,
+}
+
+#[derive(Debug, Error, Copy, Clone, Default, PartialEq, Eq)]
+pub enum XmlSourceError {
+    #[default]
+    #[error("unlexable content")]
+    Unlexable,
+    #[error("mismatched open & close tags: <{0}>...</{1}>")]
+    MismatchedOpenClose(PlistType, PlistType),
+    #[error("closing </{0}> with no opening tag")]
+    LonelyClose(PlistType),
+}
+
+impl XmlSourceError {
+    fn with_span(self, span: Span) -> LexError {
+        LexError(self, Some(span))
+    }
+}
 
 #[derive(Debug, Default)]
 pub(crate) struct Extra {
     hierarchy: Vec<PlistType>,
 }
 
-#[derive(Logos, Debug, Copy, Clone, PartialEq, Eq)]
-#[logos(extras = Extra)]
+#[derive(Logos, Copy, Clone, Debug, PartialEq, Eq)]
+#[logos(extras = Extra, error = LexError)]
 pub(crate) enum XmlToken<'a> {
     #[regex(
         r#"<\?xml\s+version\s*=\s*"([^"]*)"\s*encoding\s*=\s*"([^"]*)"\s*\?>"#,
@@ -56,6 +95,8 @@ pub(crate) enum XmlToken<'a> {
     EmptyTag(PlistType),
     #[regex(r"[ \t\r\n\f]+", priority = 3)]
     FormattingWhitespace(&'a str),
+    // TODO(correctness): this can't handle strings containing "<" or ">" even
+    //                    if they don't form a closing tag
     #[regex("[^<>]+")]
     Content(&'a str),
     #[token("<true/>", |_| true)]
@@ -94,7 +135,7 @@ fn parse_plist_version_from_lexer<'a>(
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum PlistType {
+pub(crate) enum PlistType {
     Array,
     Dictionary,
     Data,
@@ -103,6 +144,21 @@ pub enum PlistType {
     Integer,
     String,
     Float,
+}
+
+impl fmt::Display for PlistType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            PlistType::Array => f.write_str("array"),
+            PlistType::Dictionary => f.write_str("dict"),
+            PlistType::Data => f.write_str("data"),
+            PlistType::Date => f.write_str("date"),
+            PlistType::Real => f.write_str("real"),
+            PlistType::Integer => f.write_str("integer"),
+            PlistType::String => f.write_str("string"),
+            PlistType::Float => f.write_str("float"),
+        }
+    }
 }
 
 // Not hygenic in access to PlistType, otherwise fine
@@ -115,12 +171,11 @@ macro_rules! push_pop_plist_type {
                     PlistType::$pt
                 }
 
-                fn [<pop_ $pt:snake>]<'a>(lexer: &mut ::logos::Lexer<'a, XmlToken<'a>>) -> Result<PlistType, ()> {
-                    if lexer.extras.hierarchy.pop() == Some(PlistType::$pt) {
-                        Ok(PlistType::$pt)
-                    } else {
-                        // Mismatched/Extra close tag
-                        Err(())
+                fn [<pop_ $pt:snake>]<'a>(lexer: &mut ::logos::Lexer<'a, XmlToken<'a>>) -> Result<PlistType, LexError> {
+                    match lexer.extras.hierarchy.pop() {
+                        Some(pt) if pt == PlistType::$pt => Ok(pt),
+                        Some(pt) => Err(XmlSourceError::MismatchedOpenClose(pt, PlistType::$pt).with_span(lexer.span())),
+                        None => Err(XmlSourceError::LonelyClose(PlistType::$pt).with_span(lexer.span()))
                     }
                 }
             }
@@ -163,9 +218,17 @@ mod unit_tests {
     #[test]
     fn mismatched() {
         let input = "<string>Hello world!</integer>";
-        let _err = XmlToken::lexer(input)
+        let err = XmlToken::lexer(input)
             .collect::<Result<Vec<_>, _>>()
             .expect_err("shouldn't lex");
+        assert_eq!(
+            err,
+            XmlSourceError::MismatchedOpenClose(
+                PlistType::String,
+                PlistType::Integer
+            )
+            .with_span(20..30)
+        );
     }
 
     #[test]
