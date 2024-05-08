@@ -1,8 +1,14 @@
 use logos::{Lexer, Logos};
 use regex::Regex;
 
+#[derive(Debug, Default)]
+pub(crate) struct Extra {
+    hierarchy: Vec<PlistType>,
+}
+
 #[derive(Logos, Debug, Copy, Clone, PartialEq, Eq)]
-pub enum XmlToken<'a> {
+#[logos(extras = Extra)]
+pub(crate) enum XmlToken<'a> {
     #[regex(
         r#"<\?xml\s+version\s*=\s*"([^"]*)"\s*encoding\s*=\s*"([^"]*)"\s*\?>"#,
         XmlHeaderInner::parse_from_lexer
@@ -15,25 +21,25 @@ pub enum XmlToken<'a> {
         parse_plist_version_from_lexer
     )]
     PlistHeader(&'a str),
-    #[token("<array>", |_| PlistType::Array)]
-    #[token("<dict>", |_| PlistType::Dictionary)]
-    #[token("<data>", |_| PlistType::Data)]
-    #[token("<date>", |_| PlistType::Date)]
-    #[token("<real>", |_| PlistType::Real)]
-    #[token("<integer>", |_| PlistType::Integer)]
-    #[token("<string>", |_| PlistType::String)]
-    #[token("<float>", |_| PlistType::Float)]
+    #[token("<array>", push_array)]
+    #[token("<dict>", push_dictionary)]
+    #[token("<data>", push_data)]
+    #[token("<date>", push_date)]
+    #[token("<real>", push_real)]
+    #[token("<integer>", push_integer)]
+    #[token("<string>", push_string)]
+    #[token("<float>", push_float)]
     StartTag(PlistType),
     #[token("<key>")]
     StartKey,
-    #[token("</array>", |_| PlistType::Array)]
-    #[token("</dict>", |_| PlistType::Dictionary)]
-    #[token("</data>", |_| PlistType::Data)]
-    #[token("</date>", |_| PlistType::Date)]
-    #[token("</real>", |_| PlistType::Real)]
-    #[token("</integer>", |_| PlistType::Integer)]
-    #[token("</string>", |_| PlistType::String)]
-    #[token("</float>", |_| PlistType::Float)]
+    #[token("</array>", pop_array)]
+    #[token("</dict>", pop_dictionary)]
+    #[token("</data>", pop_data)]
+    #[token("</date>", pop_date)]
+    #[token("</real>", pop_real)]
+    #[token("</integer>", pop_integer)]
+    #[token("</string>", pop_string)]
+    #[token("</float>", pop_float)]
     EndTag(PlistType),
     #[token("</key>")]
     EndKey,
@@ -99,6 +105,41 @@ pub enum PlistType {
     Float,
 }
 
+// Not hygenic in access to PlistType, otherwise fine
+macro_rules! push_pop_plist_type {
+    ($($pt:ident,)+) => {
+        $(
+            ::paste::paste! {
+                fn [<push_ $pt:snake>]<'a>(lexer: &mut ::logos::Lexer<'a, XmlToken<'a>>) -> PlistType {
+                    lexer.extras.hierarchy.push(PlistType::$pt);
+                    PlistType::$pt
+                }
+
+                fn [<pop_ $pt:snake>]<'a>(lexer: &mut ::logos::Lexer<'a, XmlToken<'a>>) -> Result<PlistType, ()> {
+                    if lexer.extras.hierarchy.pop() == Some(PlistType::$pt) {
+                        Ok(PlistType::$pt)
+                    } else {
+                        // Mismatched/Extra close tag
+                        Err(())
+                    }
+                }
+            }
+        )+
+    };
+}
+
+// Put all variant names from PlistType declaration
+push_pop_plist_type! {
+    Array,
+    Dictionary,
+    Data,
+    Date,
+    Real,
+    Integer,
+    String,
+    Float,
+}
+
 #[cfg(test)]
 mod unit_tests {
     use std::fs;
@@ -117,6 +158,14 @@ mod unit_tests {
             XmlToken::Content("Hello world!"),
             XmlToken::EndTag(PlistType::String),
         ])
+    }
+
+    #[test]
+    fn mismatched() {
+        let input = "<string>Hello world!</integer>";
+        let _err = XmlToken::lexer(input)
+            .collect::<Result<Vec<_>, _>>()
+            .expect_err("shouldn't lex");
     }
 
     #[test]

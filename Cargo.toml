@@ -11,4 +11,5 @@ repository = "https://codeberg.org/alpha-tango-kilo/plist-pls"
 
 [dependencies]
 logos = "0.14"
+paste = "1"
 regex = "1.10"
