@@ -9,7 +9,7 @@ use thiserror::Error;
 pub(crate) struct LexError(XmlSourceError, Option<Span>);
 
 #[derive(Debug, Error, Diagnostic)]
-#[error("{inner}")]
+#[error("failed to parse XML")]
 #[diagnostic(
     code(plist_pls::xml),
     help("this is probably a problem with your plist file")
@@ -202,22 +202,45 @@ push_pop_plist_type! {
 
 #[cfg(test)]
 mod unit_tests {
-    use std::fs;
+    use miette::GraphicalReportHandler;
 
     use super::*;
+
+    fn should_lex(input: &str) -> Vec<XmlToken> {
+        let mut tokens = vec![];
+        for token in XmlToken::lexer(input) {
+            match token {
+                Ok(token) => tokens.push(token),
+                Err(LexError(inner, span)) => {
+                    eprintln!("Partially lexed: {tokens:#?}");
+                    // Boilerplate to get nice miette errors in panic messages
+                    let why = XmlParseSourceError {
+                        inner,
+                        source: input,
+                        span: span.map(Into::into),
+                    };
+                    let mut report = String::new();
+                    GraphicalReportHandler::new()
+                        .render_report(&mut report, &why)
+                        .expect("failed to render miette report");
+                    eprintln!("\n{}", report.trim_end());
+                    panic!("failed to lex (see above)");
+                },
+            }
+        }
+        tokens
+    }
 
     #[test]
     fn hello_world() {
         let input = "<string>Hello world!</string>";
-        let lexed = XmlToken::lexer(input)
-            .collect::<Result<Vec<_>, _>>()
-            .expect("should lex");
+        let lexed = should_lex(input);
         println!("{lexed:#?}");
         assert_eq!(lexed, vec![
             XmlToken::StartTag(PlistType::String),
             XmlToken::Content("Hello world!"),
             XmlToken::EndTag(PlistType::String),
-        ])
+        ]);
     }
 
     #[test]
@@ -237,11 +260,21 @@ mod unit_tests {
     }
 
     #[test]
+    fn contains_angle_bracket() {
+        let input = "<string>3 > 4 == true</string>";
+        let lexed = should_lex(input);
+        println!("{lexed:#?}");
+        assert_eq!(lexed, vec![
+            XmlToken::StartTag(PlistType::String),
+            XmlToken::Content("Hello world!"),
+            XmlToken::EndTag(PlistType::String),
+        ]);
+    }
+
+    #[test]
     fn whole_file() {
-        let input = fs::read_to_string("test_data/xml.plist").unwrap();
-        let lexed = XmlToken::lexer(&input)
-            .collect::<Result<Vec<_>, _>>()
-            .expect("should lex");
+        let input = include_str!("../test_data/xml.plist");
+        let lexed = should_lex(&input);
         println!("{lexed:#?}");
         assert_eq!(lexed, vec![
             XmlToken::XmlHeader(XmlHeaderInner {
@@ -358,6 +391,6 @@ mod unit_tests {
             XmlToken::FormattingWhitespace("\n"),
             XmlToken::EndPlist,
             XmlToken::FormattingWhitespace("\n"),
-        ])
+        ]);
     }
 }
