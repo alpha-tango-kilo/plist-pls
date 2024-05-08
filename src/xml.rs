@@ -42,7 +42,8 @@ impl XmlSourceError {
 
 #[derive(Debug, Default)]
 pub(crate) struct Extra {
-    hierarchy: Vec<PlistType>,
+    //             (tag, start of tag)
+    hierarchy: Vec<(PlistType, usize)>,
 }
 
 #[derive(Logos, Copy, Clone, Debug, PartialEq, Eq)]
@@ -167,14 +168,18 @@ macro_rules! push_pop_plist_type {
         $(
             ::paste::paste! {
                 fn [<push_ $pt:snake>]<'a>(lexer: &mut ::logos::Lexer<'a, XmlToken<'a>>) -> PlistType {
-                    lexer.extras.hierarchy.push(PlistType::$pt);
+                    lexer.extras.hierarchy.push((PlistType::$pt, lexer.span().start));
                     PlistType::$pt
                 }
 
                 fn [<pop_ $pt:snake>]<'a>(lexer: &mut ::logos::Lexer<'a, XmlToken<'a>>) -> Result<PlistType, LexError> {
                     match lexer.extras.hierarchy.pop() {
-                        Some(pt) if pt == PlistType::$pt => Ok(pt),
-                        Some(pt) => Err(XmlSourceError::MismatchedOpenClose(pt, PlistType::$pt).with_span(lexer.span())),
+                        Some((pt, _)) if pt == PlistType::$pt => Ok(pt),
+                        Some((pt, span_start)) => {
+                            // Use stored start span to capture <open>...</close> instead of </close>
+                            let span_end = lexer.span().end;
+                            Err(XmlSourceError::MismatchedOpenClose(pt, PlistType::$pt).with_span(span_start..span_end))
+                        },
                         None => Err(XmlSourceError::LonelyClose(PlistType::$pt).with_span(lexer.span()))
                     }
                 }
@@ -227,7 +232,7 @@ mod unit_tests {
                 PlistType::String,
                 PlistType::Integer
             )
-            .with_span(20..30)
+            .with_span(0..30)
         );
     }
 
