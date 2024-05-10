@@ -15,6 +15,7 @@ miette = "7.2"
 paste = "1"
 regex = "1.10"
 thiserror = "1"
+time = { version = "0.3", features = ["formatting", "parsing"] }
 
 [dev-dependencies]
 miette = { version = "*", features = ["fancy"] }

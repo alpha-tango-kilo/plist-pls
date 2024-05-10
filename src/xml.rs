@@ -5,6 +5,8 @@ use miette::{Diagnostic, SourceSpan};
 use regex::Regex;
 use thiserror::Error;
 
+use crate::{Date, Integer, Uid};
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct LexError(XmlSourceError, Option<Span>);
 
@@ -22,9 +24,13 @@ impl LexError {
 
 #[derive(Debug, Error, Diagnostic)]
 #[error("failed to parse XML")]
-#[diagnostic(
-    code(plist_pls::xml),
-    help("this is probably a problem with your plist file")
+#[cfg_attr(test, diagnostic(help("this is probably a bug your dumbass wrote")))]
+#[cfg_attr(
+    not(test),
+    diagnostic(
+        code(plist_pls::xml),
+        help("this is probably a problem with your plist file")
+    )
 )]
 pub struct XmlParseSourceError<'a> {
     #[source]
@@ -40,10 +46,16 @@ pub enum XmlSourceError {
     #[default]
     #[error("unlexable content")]
     Unlexable,
+    // Only used by pushers/poppers
     #[error("mismatched open & close tags: <{0}>...</{1}>")]
     MismatchedOpenClose(PlistTag, PlistTag),
     #[error("closing </{0}> with no opening tag")]
     LonelyClose(PlistTag),
+    // Only used by gobblers
+    #[error("unclosed <{0}>")]
+    Unclosed(PlistTag),
+    #[error("could not parse as {0}")]
+    CouldNotParse(PlistTag),
 }
 
 impl XmlSourceError {
@@ -58,8 +70,8 @@ pub(crate) struct Extra {
     hierarchy: Vec<(PlistTag, usize)>,
 }
 
-#[derive(Logos, Copy, Clone, Debug, PartialEq, Eq)]
-#[logos(extras = Extra, error = LexError)]
+#[derive(Logos, Copy, Clone, Debug, PartialEq)]
+#[logos(skip r"[ \t\r\n\f]+", extras = Extra, error = LexError)]
 pub(crate) enum XmlToken<'a> {
     #[regex(
         r#"<\?xml\s+version\s*=\s*"([^"]*)"\s*encoding\s*=\s*"([^"]*)"\s*\?>"#,
@@ -73,19 +85,29 @@ pub(crate) enum XmlToken<'a> {
         parse_plist_version_from_lexer
     )]
     PlistHeader(&'a str),
+    // TODO: separate StartAray & StartDictionary
     #[token("<array>", push_array)]
     #[token("<dict>", push_dictionary)]
-    #[token("<data>", push_data)]
-    #[token("<date>", push_date)]
-    #[token("<real>", push_real)]
-    #[token("<integer>", push_integer)]
-    #[token("<string>", push_string)]
-    #[token("<float>", push_float)]
-    #[token("<key>", push_key)]
-    StartTag(PlistTag),
+    StartCollection(PlistTag),
+    #[token("<string>", gobble_string)]
+    String(&'a str),
+    #[token("<data>", gobble_data)]
+    Data(&'a [u8]),
+    #[token("<date>", gobble_date)]
+    Date(Date),
+    #[token("<real>", gobble_real)]
+    Real(f64),
+    #[token("<integer>", gobble_integer)]
+    Integer(Integer),
+    #[token("<float>", gobble_float)]
+    Float(f64),
+    #[token("<uid>", gobble_uid)]
+    Uid(Uid),
+    #[token("<key>", gobble_key)]
+    Key(&'a str),
     #[token("</array>", pop_array)]
     #[token("</dict>", pop_dictionary)]
-    EndCollectionTag(PlistTag),
+    EndCollection(PlistTag),
     #[token("</plist>")]
     EndPlist,
     #[token("<array/>", |_| PlistTag::Array)]
@@ -97,37 +119,9 @@ pub(crate) enum XmlToken<'a> {
     #[token("<string/>", |_| PlistTag::String)]
     #[token("<float/>", |_| PlistTag::Float)]
     EmptyTag(PlistTag),
-    #[regex(r"[ \t\r\n\f]+", priority = 3)]
-    FormattingWhitespace(&'a str),
-    // Don't need to store what's being closed, since the callback checks it
-    #[regex(
-        "[^<]*</((data)|(date)|(real)|(integer)|(string)|(float)|(key))>",
-        content_with_close
-    )]
-    ContentWithClose(&'a str),
     #[token("<true/>", |_| true)]
     #[token("<false/>", |_| false)]
     Bool(bool),
-}
-
-fn content_with_close<'a>(
-    lexer: &mut Lexer<'a, XmlToken<'a>>,
-) -> Result<&'a str, LexError> {
-    let Some((content, close)) = lexer.slice().rsplit_once("</") else {
-        unreachable!();
-    };
-    //             remove end '>'
-    match &close[..close.len() - 1] {
-        "data" => pop_data(lexer)?,
-        "date" => pop_date(lexer)?,
-        "real" => pop_real(lexer)?,
-        "integer" => pop_integer(lexer)?,
-        "string" => pop_string(lexer)?,
-        "float" => pop_float(lexer)?,
-        "key" => pop_key(lexer)?,
-        tag => unreachable!("found </{tag}> in ContentWithClose"),
-    };
-    Ok(content)
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -170,6 +164,7 @@ pub(crate) enum PlistTag {
     Integer,
     String,
     Float,
+    Uid,
     Key,
 }
 
@@ -184,13 +179,86 @@ impl fmt::Display for PlistTag {
             PlistTag::Integer => f.write_str("integer"),
             PlistTag::String => f.write_str("string"),
             PlistTag::Float => f.write_str("float"),
+            PlistTag::Uid => f.write_str("uid"),
             PlistTag::Key => f.write_str("key"),
         }
     }
 }
 
+macro_rules! gobble_impls {
+    () => {};
+    // Use FromStr case
+    ($pt:ident: $ty:ident => $tag:literal) => {
+        ::paste::paste! {
+            fn [<gobble_ $pt:snake>]<'a>(
+                lexer: &mut ::logos::Lexer<'a, XmlToken<'a>>
+            ) -> ::std::result::Result<$ty, LexError> {
+                let rest = lexer.remainder();
+                // Fun footgun: close_tag_start is relative to the remainder,
+                // whereas span_{start,end} are relative to the source
+                let close_tag_start = rest.find($tag).ok_or_else(|| {
+                    let span_start = lexer.span().end + 1;
+                    let span_end = span_start + rest.len();
+                    XmlSourceError::Unclosed(PlistTag::$pt)
+                        .with_span(span_start..span_end)
+                })?;
+                lexer.bump(close_tag_start + $tag.len());
+                let content = &rest[..close_tag_start];
+                content.parse::<$ty>().map_err(|_| {
+                    let span_start = lexer.span().end + 1;
+                    let span_end = span_start + rest.len();
+                    XmlSourceError::CouldNotParse(PlistTag::$pt)
+                        .with_span(span_start..span_end)
+                })
+            }
+        }
+    };
+    // Use AsRef case, indicated by the lifetime
+    ($pt:ident: &$lt:lifetime $ty:ident => $tag:literal) => {
+        ::paste::paste! {
+            fn [<gobble_ $pt:snake>]<$lt>(
+                lexer: &mut ::logos::Lexer<$lt, XmlToken<$lt>>
+            ) -> ::std::result::Result<&$lt $ty, LexError> {
+                let rest = lexer.remainder();
+                let close_tag_start = rest.find($tag).ok_or_else(|| {
+                    let span_start = lexer.span().end + 1;
+                    let span_end = span_start + rest.len();
+                    XmlSourceError::Unclosed(PlistTag::$pt)
+                        .with_span(span_start..span_end)
+                })?;
+                lexer.bump(close_tag_start + $tag.len());
+                let content = &rest[..close_tag_start];
+                Ok(content.as_ref())
+            }
+        }
+    };
+    // Recurse, recurse!
+    ($pt:ident: $ty:ident => $tag:literal, $($tail:tt)*) => {
+        gobble_impls! { $pt: $ty => $tag }
+        gobble_impls! { $($tail)* }
+    };
+    ($pt:ident: &$lt:lifetime $ty:ident => $tag:literal, $($tail:tt)*) => {
+        gobble_impls! { $pt: &$lt $ty => $tag }
+        gobble_impls! { $($tail)* }
+    };
+}
+
+type ByteSlice = [u8];
+
+gobble_impls! {
+    String: &'a str => "</string>",
+    Integer: Integer => "</integer>",
+    Float: f64 => "</float>",
+    Real: f64 => "</real>",
+    Date: Date => "</date>",
+    Uid: Uid => "</uid>",
+    // TODO: data is base64 encoded or something
+    Data: &'a ByteSlice => "</data>",
+    Key: &'a str => "</key>",
+}
+
 // Not hygenic in access to PlistTag, otherwise fine
-macro_rules! push_pop_plist_type {
+macro_rules! push_pop_collection_impls {
     ($($pt:ident,)+) => {
         $(
             ::paste::paste! {
@@ -216,16 +284,9 @@ macro_rules! push_pop_plist_type {
 }
 
 // Put all variant names from PlistTag declaration
-push_pop_plist_type! {
+push_pop_collection_impls! {
     Array,
     Dictionary,
-    Data,
-    Date,
-    Real,
-    Integer,
-    String,
-    Float,
-    Key,
 }
 
 #[cfg(test)]
@@ -233,6 +294,14 @@ mod unit_tests {
     use miette::GraphicalReportHandler;
 
     use super::*;
+
+    fn print_miette(err: &dyn Diagnostic) {
+        let mut report = String::new();
+        GraphicalReportHandler::new()
+            .render_report(&mut report, err)
+            .expect("failed to render miette report");
+        eprintln!("\n{}", report.trim_end());
+    }
 
     fn should_lex(input: &str) -> Vec<XmlToken> {
         let mut tokens = vec![];
@@ -243,11 +312,7 @@ mod unit_tests {
                     eprintln!("Partially lexed: {tokens:#?}");
                     // Boilerplate to get nice miette errors in panic messages
                     let why = lex_error.with_source(input);
-                    let mut report = String::new();
-                    GraphicalReportHandler::new()
-                        .render_report(&mut report, &why)
-                        .expect("failed to render miette report");
-                    eprintln!("\n{}", report.trim_end());
+                    print_miette(&why);
                     panic!("failed to lex (see above)");
                 },
             }
@@ -260,10 +325,7 @@ mod unit_tests {
         let input = "<string>Hello world!</string>";
         let lexed = should_lex(input);
         println!("{lexed:#?}");
-        assert_eq!(lexed, vec![
-            XmlToken::StartTag(PlistTag::String),
-            XmlToken::ContentWithClose("Hello world!"),
-        ]);
+        assert_eq!(lexed, vec![XmlToken::String("Hello world!")]);
     }
 
     #[test]
@@ -272,127 +334,64 @@ mod unit_tests {
         let err = XmlToken::lexer(input)
             .collect::<Result<Vec<_>, _>>()
             .expect_err("shouldn't lex");
+        print_miette(&err.clone().with_source(input));
         assert_eq!(
             err,
-            XmlSourceError::MismatchedOpenClose(
-                PlistTag::String,
-                PlistTag::Integer
-            )
-            .with_span(0..30)
+            XmlSourceError::Unclosed(PlistTag::String).with_span(9..31),
         );
     }
 
     #[test]
     fn contains_angle_bracket() {
-        let input = "<string>3 > 4 == true</string>";
+        let input = "<string>3 < 4 == true</string>";
         let lexed = should_lex(input);
         println!("{lexed:#?}");
-        assert_eq!(lexed, vec![
-            XmlToken::StartTag(PlistTag::String),
-            XmlToken::ContentWithClose("3 > 4 == true"),
-        ]);
+        assert_eq!(lexed, vec![XmlToken::String("3 < 4 == true")]);
     }
 
     #[test]
     fn whole_file() {
         let input = include_str!("../test_data/xml.plist");
-        let lexed = should_lex(&input);
+        let lexed = should_lex(input);
         println!("{lexed:#?}");
         assert_eq!(lexed, vec![
             XmlToken::XmlHeader(XmlHeaderInner {
                 version: "1.0",
                 encoding: "UTF-8",
             }),
-            XmlToken::FormattingWhitespace("\n"),
             XmlToken::DocTypeHeader,
-            XmlToken::FormattingWhitespace("\n"),
             XmlToken::PlistHeader("1.0"),
-            XmlToken::FormattingWhitespace("\n"),
-            XmlToken::StartTag(PlistTag::Dictionary),
-            XmlToken::FormattingWhitespace("\n\t"),
-            XmlToken::StartTag(PlistTag::Key),
-            XmlToken::ContentWithClose("Author"),
-            XmlToken::FormattingWhitespace("\n\t"),
-            XmlToken::StartTag(PlistTag::String),
-            XmlToken::ContentWithClose("William Shakespeare"),
-            XmlToken::FormattingWhitespace("\n\t"),
-            XmlToken::StartTag(PlistTag::Key),
-            XmlToken::ContentWithClose("Lines"),
-            XmlToken::FormattingWhitespace("\n\t"),
-            XmlToken::StartTag(PlistTag::Array),
-            XmlToken::FormattingWhitespace("\n\t\t"),
-            XmlToken::StartTag(PlistTag::String),
-            XmlToken::ContentWithClose("It is a tale told by an idiot,     "),
-            XmlToken::FormattingWhitespace("\n\t\t"),
-            XmlToken::StartTag(PlistTag::String),
-            XmlToken::ContentWithClose(
-                "Full of sound and fury, signifying nothing."
-            ),
-            XmlToken::FormattingWhitespace("\n\t"),
-            XmlToken::EndCollectionTag(PlistTag::Array),
-            XmlToken::FormattingWhitespace("\n\t"),
-            XmlToken::StartTag(PlistTag::Key),
-            XmlToken::ContentWithClose("Death"),
-            XmlToken::FormattingWhitespace("\n\t"),
-            XmlToken::StartTag(PlistTag::Integer),
-            XmlToken::ContentWithClose("1564"),
-            XmlToken::FormattingWhitespace("\n\t"),
-            XmlToken::StartTag(PlistTag::Key),
-            XmlToken::ContentWithClose("Height"),
-            XmlToken::FormattingWhitespace("\n\t"),
-            XmlToken::StartTag(PlistTag::Real),
-            XmlToken::ContentWithClose("1.6"),
-            XmlToken::FormattingWhitespace("\n\t"),
-            XmlToken::StartTag(PlistTag::Key),
-            XmlToken::ContentWithClose("Data"),
-            XmlToken::FormattingWhitespace("\n\t"),
-            XmlToken::StartTag(PlistTag::Data),
-            XmlToken::ContentWithClose("\n\t\tAAAAvgAAAA\n\t\tMAAAAeAAAA\n\t"),
-            XmlToken::FormattingWhitespace("\n\t"),
-            XmlToken::StartTag(PlistTag::Key),
-            XmlToken::ContentWithClose("Birthdate"),
-            XmlToken::FormattingWhitespace("\n\t"),
-            XmlToken::StartTag(PlistTag::Date),
-            XmlToken::ContentWithClose("1981-05-16T11:32:06Z"),
-            XmlToken::FormattingWhitespace("\n\t"),
-            XmlToken::StartTag(PlistTag::Key),
-            XmlToken::ContentWithClose("Blank"),
-            XmlToken::FormattingWhitespace("\n\t"),
-            XmlToken::StartTag(PlistTag::String),
-            XmlToken::ContentWithClose(""),
-            XmlToken::FormattingWhitespace("\n    "),
-            XmlToken::StartTag(PlistTag::Key),
-            XmlToken::ContentWithClose("BiggestNumber"),
-            XmlToken::FormattingWhitespace("\n    "),
-            XmlToken::StartTag(PlistTag::Integer),
-            XmlToken::ContentWithClose("18446744073709551615"),
-            XmlToken::FormattingWhitespace("\n    "),
-            XmlToken::StartTag(PlistTag::Key),
-            XmlToken::ContentWithClose("SmallestNumber"),
-            XmlToken::FormattingWhitespace("\n    "),
-            XmlToken::StartTag(PlistTag::Integer),
-            XmlToken::ContentWithClose("-9223372036854775808"),
-            XmlToken::FormattingWhitespace("\n    "),
-            XmlToken::StartTag(PlistTag::Key),
-            XmlToken::ContentWithClose("HexademicalNumber"),
-            XmlToken::FormattingWhitespace("\n    "),
-            XmlToken::StartTag(PlistTag::Integer),
-            XmlToken::ContentWithClose("0xDEADBEEF"),
-            XmlToken::FormattingWhitespace("\n    "),
-            XmlToken::StartTag(PlistTag::Key),
-            XmlToken::ContentWithClose("IsTrue"),
-            XmlToken::FormattingWhitespace("\n    "),
+            XmlToken::StartCollection(PlistTag::Dictionary),
+            XmlToken::Key("Author"),
+            XmlToken::String("William Shakespeare"),
+            XmlToken::Key("Lines"),
+            XmlToken::StartCollection(PlistTag::Array),
+            XmlToken::String("It is a tale told by an idiot,     "),
+            XmlToken::String("Full of sound and fury, signifying nothing."),
+            XmlToken::EndCollection(PlistTag::Array),
+            XmlToken::Key("Death"),
+            XmlToken::Integer(1564u64.into()),
+            XmlToken::Key("Height"),
+            XmlToken::Real(1.6),
+            XmlToken::Key("Data"),
+            // TODO: base64 decode this
+            XmlToken::Data(b"\n\t\tAAAAvgAAAA\n\t\tMAAAAeAAAA\n\t"),
+            XmlToken::Key("Birthdate"),
+            XmlToken::Date("1981-05-16T11:32:06Z".parse().unwrap()),
+            XmlToken::Key("Blank"),
+            XmlToken::String(""),
+            XmlToken::Key("BiggestNumber"),
+            XmlToken::Integer(u64::MAX.into()),
+            XmlToken::Key("SmallestNumber"),
+            XmlToken::Integer(i64::MIN.into()),
+            XmlToken::Key("HexademicalNumber"),
+            XmlToken::Integer(0xDEADBEEFu64.into()),
+            XmlToken::Key("IsTrue"),
             XmlToken::Bool(true),
-            XmlToken::FormattingWhitespace("\n    "),
-            XmlToken::StartTag(PlistTag::Key),
-            XmlToken::ContentWithClose("IsNotFalse"),
-            XmlToken::FormattingWhitespace("\n    "),
+            XmlToken::Key("IsNotFalse"),
             XmlToken::Bool(false),
-            XmlToken::FormattingWhitespace("\n"),
-            XmlToken::EndCollectionTag(PlistTag::Dictionary),
-            XmlToken::FormattingWhitespace("\n"),
+            XmlToken::EndCollection(PlistTag::Dictionary),
             XmlToken::EndPlist,
-            XmlToken::FormattingWhitespace("\n"),
         ]);
     }
 }
