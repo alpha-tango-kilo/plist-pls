@@ -191,9 +191,8 @@ impl fmt::Display for PlistTag {
 }
 
 macro_rules! gobble_impls {
-    () => {};
     // Use FromStr case
-    ($pt:ident: $ty:ident => $tag:literal) => {
+    ($pt:ident: $ty:ident => $tag:literal $(,)?) => {
         ::paste::paste! {
             fn [<gobble_ $pt:snake>]<'a>(
                 lexer: &mut ::logos::Lexer<'a, XmlToken<'a>>
@@ -219,7 +218,7 @@ macro_rules! gobble_impls {
         }
     };
     // Use AsRef case, indicated by the lifetime
-    ($pt:ident: &$lt:lifetime $ty:ident => $tag:literal) => {
+    ($pt:ident: &$lt:lifetime $ty:ident => $tag:literal $(,)?) => {
         ::paste::paste! {
             fn [<gobble_ $pt:snake>]<$lt>(
                 lexer: &mut ::logos::Lexer<$lt, XmlToken<$lt>>
@@ -238,11 +237,11 @@ macro_rules! gobble_impls {
         }
     };
     // Recurse, recurse!
-    ($pt:ident: $ty:ident => $tag:literal, $($tail:tt)*) => {
+    ($pt:ident: $ty:ident => $tag:literal, $($tail:tt)+) => {
         gobble_impls! { $pt: $ty => $tag }
         gobble_impls! { $($tail)* }
     };
-    ($pt:ident: &$lt:lifetime $ty:ident => $tag:literal, $($tail:tt)*) => {
+    ($pt:ident: &$lt:lifetime $ty:ident => $tag:literal, $($tail:tt)+) => {
         gobble_impls! { $pt: &$lt $ty => $tag }
         gobble_impls! { $($tail)* }
     };
