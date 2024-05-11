@@ -56,6 +56,11 @@ pub enum XmlSourceError {
     Unclosed(PlistTag),
     #[error("could not parse as {0}")]
     CouldNotParse(PlistTag),
+    // Only used by collections
+    #[error(
+        "collections are too deeply nested, only 58-deep collections supported"
+    )]
+    WeAreInTooDeep,
 }
 
 impl XmlSourceError {
@@ -66,8 +71,7 @@ impl XmlSourceError {
 
 #[derive(Debug, Default)]
 pub(crate) struct Extra {
-    //             (tag, start of tag)
-    hierarchy: Vec<(PlistTag, usize)>,
+    hierarchy: HierarchyTracker,
 }
 
 #[derive(Logos, Copy, Clone, Debug, PartialEq)]
@@ -269,25 +273,28 @@ fn gobble_data<'a>(
     Ok(content.into())
 }
 
-// Not hygenic in access to PlistTag, otherwise fine
 macro_rules! push_pop_collection_impls {
     ($($pt:ident,)+) => {
         $(
             ::paste::paste! {
-                fn [<push_ $pt:snake>]<'a>(lexer: &mut ::logos::Lexer<'a, XmlToken<'a>>) {
-                    lexer.extras.hierarchy.push((PlistTag::$pt, lexer.span().start));
+                fn [<push_ $pt>]<'a>(
+                    lexer: &mut ::logos::Lexer<'a, XmlToken<'a>>
+                ) -> Result<(), LexError> {
+                    lexer
+                        .extras
+                        .hierarchy
+                        .[<push_ $pt>]()
+                        .map_err(|err| err.with_span(lexer.span()))
                 }
 
-                fn [<pop_ $pt:snake>]<'a>(lexer: &mut ::logos::Lexer<'a, XmlToken<'a>>) -> Result<(), LexError> {
-                    match lexer.extras.hierarchy.pop() {
-                        Some((pt, _)) if pt == PlistTag::$pt => Ok(()),
-                        Some((pt, span_start)) => {
-                            // Use stored start span to capture <open>...</close> instead of </close>
-                            let span_end = lexer.span().end;
-                            Err(XmlSourceError::MismatchedOpenClose(pt, PlistTag::$pt).with_span(span_start..span_end))
-                        },
-                        None => Err(XmlSourceError::LonelyClose(PlistTag::$pt).with_span(lexer.span()))
-                    }
+                fn [<pop_ $pt>]<'a>(
+                    lexer: &mut ::logos::Lexer<'a, XmlToken<'a>>
+                ) -> Result<(), LexError> {
+                   lexer
+                        .extras
+                        .hierarchy
+                        .[<pop_ $pt>]()
+                        .map_err(|err| err.with_span(lexer.span()))
                 }
             }
         )+
@@ -296,8 +303,130 @@ macro_rules! push_pop_collection_impls {
 
 // Put all variant names from PlistTag declaration
 push_pop_collection_impls! {
-    Array,
-    Dictionary,
+    array,
+    dictionary,
+}
+
+// Oh yeah, it's bit twiddling time
+// 58 most significant bits are an RTL stack, where 0 is array and 1 is
+// dictionary
+// 6 least significant bits depth (i.e. how many arrays/dictionaries we have to
+// close)
+// This means without allocations we can support up to 58-deep nested
+// collections
+//
+// There are two Debug representations: the default just shows the bits, the
+// alternate (#) shows depth & stack separately
+#[derive(Default, Copy, Clone)]
+pub struct HierarchyTracker(u64);
+
+impl HierarchyTracker {
+    const COUNT_BITS: u8 = 6;
+    const DEPTH_MASK: u64 = 0b0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0011_1111;
+    const DICTIONARY_MASK: u64 = 0b0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0100_0000;
+    const MAX_DEPTH: u8 = 58;
+    const STACK_MASK: u64 = !Self::DEPTH_MASK;
+
+    const fn stack(&self) -> u64 {
+        self.0 & Self::STACK_MASK
+    }
+
+    const fn depth(&self) -> u8 {
+        // Keep last 6 bits
+        (self.0 & Self::DEPTH_MASK) as u8
+    }
+
+    fn push_array(&mut self) -> Result<(), XmlSourceError> {
+        let depth = self.depth();
+        if depth < Self::MAX_DEPTH {
+            // Push all the stack bits left
+            let stack = self.stack() << 1;
+            // Add depth + 1 to get new depth
+            self.0 = stack + depth as u64 + 1;
+            Ok(())
+        } else {
+            Err(XmlSourceError::WeAreInTooDeep)
+        }
+    }
+
+    fn push_dictionary(&mut self) -> Result<(), XmlSourceError> {
+        let depth = self.depth();
+        if depth < Self::MAX_DEPTH {
+            // Push all the stack bits left
+            let stack = self.stack() << 1;
+            // Put a dictionary on the top of the stack
+            let stack = stack | Self::DICTIONARY_MASK;
+            // Add depth + 1 to get new depth
+            self.0 = stack + depth as u64 + 1;
+            Ok(())
+        } else {
+            Err(XmlSourceError::WeAreInTooDeep)
+        }
+    }
+
+    fn pop_array(&mut self) -> Result<(), XmlSourceError> {
+        let depth = self.depth();
+        if depth > 0 {
+            let is_array = self.0 & Self::DICTIONARY_MASK == 0;
+            if is_array {
+                // We don't have to unset the array bit (since array **is**
+                // unset), so just rshift the stack
+                let stack = self.stack() >> 1;
+                self.0 = stack + depth as u64 - 1;
+                Ok(())
+            } else {
+                Err(XmlSourceError::MismatchedOpenClose(
+                    PlistTag::Dictionary,
+                    PlistTag::Array,
+                ))
+            }
+        } else {
+            Err(XmlSourceError::LonelyClose(PlistTag::Array))
+        }
+    }
+
+    fn pop_dictionary(&mut self) -> Result<(), XmlSourceError> {
+        let depth = self.depth();
+        if depth > 0 {
+            let is_dictionary =
+                self.0 & Self::DICTIONARY_MASK == Self::DICTIONARY_MASK;
+            if is_dictionary {
+                // Unset the dictionary bit and shift right
+                let stack = (self.stack() ^ Self::DICTIONARY_MASK) >> 1;
+                self.0 = stack + depth as u64 - 1;
+                Ok(())
+            } else {
+                Err(XmlSourceError::MismatchedOpenClose(
+                    PlistTag::Array,
+                    PlistTag::Dictionary,
+                ))
+            }
+        } else {
+            Err(XmlSourceError::LonelyClose(PlistTag::Dictionary))
+        }
+    }
+}
+
+impl fmt::Debug for HierarchyTracker {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if !f.alternate() {
+            f.debug_tuple("HierarchyTracker")
+                .field(&format_args!("0b{:064b}", self.0))
+                .finish()
+        } else {
+            f.debug_struct("HierarchyTracker")
+                .field("depth", &self.depth())
+                .field(
+                    "stack (RTL)",
+                    &format_args!(
+                        "{:0width$b}",
+                        self.0 >> HierarchyTracker::COUNT_BITS,
+                        width = (58 - self.0.leading_zeros()) as usize,
+                    ),
+                )
+                .finish()
+        }
+    }
 }
 
 #[cfg(test)]
@@ -409,5 +538,57 @@ mod unit_tests {
             XmlToken::EndDictionary,
             XmlToken::EndPlist,
         ]);
+    }
+
+    mod hierarchy_tracker {
+        use super::*;
+
+        #[test]
+        fn cant_pop_empty() {
+            let mut hierarchy = HierarchyTracker::default();
+            assert_eq!(
+                hierarchy.pop_array(),
+                Err(XmlSourceError::LonelyClose(PlistTag::Array))
+            );
+            assert_eq!(
+                hierarchy.pop_dictionary(),
+                Err(XmlSourceError::LonelyClose(PlistTag::Dictionary))
+            );
+        }
+
+        // Array-in, array-out
+        #[test]
+        fn a_a() {
+            let mut hierarchy = HierarchyTracker::default();
+            hierarchy.push_array().expect("should push array");
+            hierarchy.pop_array().expect("should pop array");
+        }
+
+        // Dictionary-in, dictionary-out
+        #[test]
+        fn d_d() {
+            let mut hierarchy = HierarchyTracker::default();
+            hierarchy.push_dictionary().expect("should push dictionary");
+            hierarchy.pop_dictionary().expect("should pop dictionary");
+        }
+
+        // Extrapolate
+        #[test]
+        fn ad_da() {
+            let mut hierarchy = HierarchyTracker::default();
+            hierarchy.push_array().expect("should push array");
+            hierarchy.push_dictionary().expect("should push dictionary");
+            hierarchy.pop_dictionary().expect("should pop dictionary");
+            hierarchy.pop_array().expect("should pop array");
+        }
+
+        #[test]
+        fn da_ad() {
+            let mut hierarchy = HierarchyTracker::default();
+            hierarchy.push_dictionary().expect("should push dictionary");
+            hierarchy.push_array().expect("should push array");
+            hierarchy.pop_array().expect("should pop array");
+            hierarchy.pop_dictionary().expect("should pop dictionary");
+        }
     }
 }
