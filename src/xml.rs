@@ -5,7 +5,7 @@ use miette::{Diagnostic, SourceSpan};
 use regex::Regex;
 use thiserror::Error;
 
-use crate::{Date, Integer, Uid};
+use crate::{Data, Date, Integer, Uid};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct LexError(XmlSourceError, Option<Span>);
@@ -92,7 +92,7 @@ pub(crate) enum XmlToken<'a> {
     #[token("<string>", gobble_string)]
     String(&'a str),
     #[token("<data>", gobble_data)]
-    Data(&'a [u8]),
+    Data(Data<'a>),
     #[token("<date>", gobble_date)]
     Date(Date),
     #[token("<real>", gobble_real)]
@@ -243,8 +243,6 @@ macro_rules! gobble_impls {
     };
 }
 
-type ByteSlice = [u8];
-
 gobble_impls! {
     String: &'a str => "</string>",
     Integer: Integer => "</integer>",
@@ -252,9 +250,22 @@ gobble_impls! {
     Real: f64 => "</real>",
     Date: Date => "</date>",
     Uid: Uid => "</uid>",
-    // TODO: data is base64 encoded or something
-    Data: &'a ByteSlice => "</data>",
     Key: &'a str => "</key>",
+}
+
+fn gobble_data<'a>(
+    lexer: &mut Lexer<'a, XmlToken<'a>>,
+) -> Result<Data<'a>, LexError> {
+    const TAG: &str = "</data>";
+    let rest = lexer.remainder();
+    let close_tag_start = rest.find(TAG).ok_or_else(|| {
+        let span_start = lexer.span().end + 1;
+        let span_end = span_start + rest.len();
+        XmlSourceError::Unclosed(PlistTag::Data).with_span(span_start..span_end)
+    })?;
+    lexer.bump(close_tag_start + TAG.len());
+    let content = &rest[..close_tag_start];
+    Ok(content.into())
 }
 
 // Not hygenic in access to PlistTag, otherwise fine
@@ -307,6 +318,12 @@ mod unit_tests {
         let mut tokens = vec![];
         for token in XmlToken::lexer(input) {
             match token {
+                Ok(token @ XmlToken::Data(data)) => {
+                    if let Err(why) = data.decode() {
+                        panic!("couldn't decode {data:?}: {why}");
+                    }
+                    tokens.push(token);
+                },
                 Ok(token) => tokens.push(token),
                 Err(lex_error) => {
                     eprintln!("Partially lexed: {tokens:#?}");
@@ -374,8 +391,7 @@ mod unit_tests {
             XmlToken::Key("Height"),
             XmlToken::Real(1.6),
             XmlToken::Key("Data"),
-            // TODO: base64 decode this
-            XmlToken::Data(b"\n\t\tAAAAvgAAAA\n\t\tMAAAAeAAAA\n\t"),
+            XmlToken::Data("\n\t\tAAAAvgAAAA\n\t\tMAAAAeAAAA\n\t".into()),
             XmlToken::Key("Birthdate"),
             XmlToken::Date("1981-05-16T11:32:06Z".parse().unwrap()),
             XmlToken::Key("Blank"),

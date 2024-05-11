@@ -1,5 +1,7 @@
-use std::{num::IntErrorKind, str::FromStr, time::SystemTime};
+use std::{io, io::Read, num::IntErrorKind, str::FromStr, time::SystemTime};
 
+use base64::{prelude::BASE64_STANDARD, read::DecoderReader};
+use iter_read::IterRead;
 use thiserror::Error;
 use time::{
     format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset,
@@ -110,5 +112,37 @@ impl FromStr for Uid {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         s.parse::<u64>().map(Into::into).map_err(ParseUidError)
+    }
+}
+
+// TODO: document caveats
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct Data<'a> {
+    encoded: &'a str,
+}
+
+#[derive(Debug, Error)]
+#[error(transparent)]
+pub struct DecodeDataError(io::Error);
+
+impl Data<'_> {
+    pub fn decode(&self) -> Result<Vec<u8>, DecodeDataError> {
+        let mut reader = IterRead::new(
+            self.encoded
+                .bytes()
+                .filter(|byte| !byte.is_ascii_whitespace()),
+        );
+        let mut buf = Vec::new();
+        let mut decoder = DecoderReader::new(&mut reader, &BASE64_STANDARD);
+        decoder.read_to_end(&mut buf).map_err(DecodeDataError)?;
+        Ok(buf)
+    }
+}
+
+impl<'a> From<&'a str> for Data<'a> {
+    fn from(value: &'a str) -> Self {
+        Self {
+            encoded: value.trim(),
+        }
     }
 }
