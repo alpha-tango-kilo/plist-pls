@@ -85,10 +85,10 @@ pub(crate) enum XmlToken<'a> {
         parse_plist_version_from_lexer
     )]
     PlistHeader(&'a str),
-    // TODO: separate StartAray & StartDictionary
     #[token("<array>", push_array)]
+    StartArray,
     #[token("<dict>", push_dictionary)]
-    StartCollection(PlistTag),
+    StartDictionary,
     #[token("<string>", gobble_string)]
     String(&'a str),
     #[token("<data>", gobble_data)]
@@ -106,8 +106,9 @@ pub(crate) enum XmlToken<'a> {
     #[token("<key>", gobble_key)]
     Key(&'a str),
     #[token("</array>", pop_array)]
+    EndArray,
     #[token("</dict>", pop_dictionary)]
-    EndCollection(PlistTag),
+    EndDictionary,
     #[token("</plist>")]
     EndPlist,
     #[token("<array/>", |_| PlistTag::Array)]
@@ -273,14 +274,13 @@ macro_rules! push_pop_collection_impls {
     ($($pt:ident,)+) => {
         $(
             ::paste::paste! {
-                fn [<push_ $pt:snake>]<'a>(lexer: &mut ::logos::Lexer<'a, XmlToken<'a>>) -> PlistTag {
+                fn [<push_ $pt:snake>]<'a>(lexer: &mut ::logos::Lexer<'a, XmlToken<'a>>) {
                     lexer.extras.hierarchy.push((PlistTag::$pt, lexer.span().start));
-                    PlistTag::$pt
                 }
 
-                fn [<pop_ $pt:snake>]<'a>(lexer: &mut ::logos::Lexer<'a, XmlToken<'a>>) -> Result<PlistTag, LexError> {
+                fn [<pop_ $pt:snake>]<'a>(lexer: &mut ::logos::Lexer<'a, XmlToken<'a>>) -> Result<(), LexError> {
                     match lexer.extras.hierarchy.pop() {
-                        Some((pt, _)) if pt == PlistTag::$pt => Ok(pt),
+                        Some((pt, _)) if pt == PlistTag::$pt => Ok(()),
                         Some((pt, span_start)) => {
                             // Use stored start span to capture <open>...</close> instead of </close>
                             let span_end = lexer.span().end;
@@ -378,14 +378,14 @@ mod unit_tests {
             }),
             XmlToken::DocTypeHeader,
             XmlToken::PlistHeader("1.0"),
-            XmlToken::StartCollection(PlistTag::Dictionary),
+            XmlToken::StartDictionary,
             XmlToken::Key("Author"),
             XmlToken::String("William Shakespeare"),
             XmlToken::Key("Lines"),
-            XmlToken::StartCollection(PlistTag::Array),
+            XmlToken::StartArray,
             XmlToken::String("It is a tale told by an idiot,     "),
             XmlToken::String("Full of sound and fury, signifying nothing."),
-            XmlToken::EndCollection(PlistTag::Array),
+            XmlToken::EndArray,
             XmlToken::Key("Death"),
             XmlToken::Integer(1564u64.into()),
             XmlToken::Key("Height"),
@@ -406,7 +406,7 @@ mod unit_tests {
             XmlToken::Bool(true),
             XmlToken::Key("IsNotFalse"),
             XmlToken::Bool(false),
-            XmlToken::EndCollection(PlistTag::Dictionary),
+            XmlToken::EndDictionary,
             XmlToken::EndPlist,
         ]);
     }
