@@ -464,7 +464,8 @@ impl fmt::Debug for HierarchyTracker {
                     &format_args!(
                         "{:0width$b}",
                         self.0 >> HierarchyTracker::COUNT_BITS,
-                        width = (58 - self.0.leading_zeros()) as usize,
+                        width = (Self::MAX_DEPTH as usize)
+                            .saturating_sub(self.0.leading_zeros() as usize),
                     ),
                 )
                 .finish()
