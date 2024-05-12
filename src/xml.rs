@@ -11,6 +11,10 @@ use crate::{Data, Date, Integer, Uid};
 pub(crate) struct XmlError(XmlErrorType, Option<Span>);
 
 impl XmlError {
+    pub(crate) const fn new(r#type: XmlErrorType) -> Self {
+        Self(r#type, None)
+    }
+
     pub(crate) fn with_source(self, source: &str) -> XmlParseSourceError {
         let XmlError(inner, span) = self;
         XmlParseSourceError {
@@ -67,6 +71,8 @@ pub enum XmlErrorType {
     MissingKey,
     #[error("expected value")]
     ExpectedValue,
+    #[error("input ended unexpectedly")]
+    UnexpectedEnd,
 }
 
 impl XmlErrorType {

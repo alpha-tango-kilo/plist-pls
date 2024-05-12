@@ -54,8 +54,9 @@ impl<'a> BuildFromLexer<'a, XmlToken<'a>> for Value<'a> {
     fn build_from_tokens(
         token_iter: &mut TokenIter<'a, XmlToken<'a>>,
     ) -> Result<Self, Self::Error> {
-        let (first, span) =
-            token_iter.next().ok_or_else(|| panic!("empty value"))?;
+        let (first, span) = token_iter
+            .next()
+            .ok_or(XmlError::new(XmlErrorType::UnexpectedEnd))?;
         let first = first?;
         match first {
             // Collections
@@ -165,8 +166,9 @@ impl<'a> BuildFromLexer<'a, XmlToken<'a>> for Dictionary<'a> {
         // would the caller know we need this impl?)
         let mut dict = Dictionary::new();
         loop {
-            let (token, span) =
-                token_iter.next().ok_or_else(|| todo!("unexpected end"))?;
+            let (token, span) = token_iter
+                .next()
+                .ok_or(XmlError::new(XmlErrorType::UnexpectedEnd))?;
             let token = token?;
             let key = match token {
                 XmlToken::Key(key) => key,
@@ -311,8 +313,9 @@ impl<'a> BuildFromLexer<'a, XmlToken<'a>> for Array<'a> {
         // would the caller know we need this impl?)
         let mut array = Array::new();
         loop {
-            let (peeked_token_res, _) =
-                token_iter.peek().ok_or_else(|| todo!("unexpected end"))?;
+            let (peeked_token_res, _) = token_iter
+                .peek()
+                .ok_or(XmlError::new(XmlErrorType::UnexpectedEnd))?;
             match peeked_token_res {
                 Ok(XmlToken::EndArray) => {
                     token_iter.next();
