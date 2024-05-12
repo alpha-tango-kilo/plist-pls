@@ -73,6 +73,8 @@ pub enum XmlErrorType {
     ExpectedValue,
     #[error("input ended unexpectedly")]
     UnexpectedEnd,
+    #[error("unwanted extra content")]
+    ExpectedEnd,
 }
 
 impl XmlErrorType {

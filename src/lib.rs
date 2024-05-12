@@ -41,10 +41,14 @@ impl<'a> Value<'a> {
         let mut token_iter = XmlToken::lexer(source).spanned().peekable();
         let value = Value::build_from_tokens(&mut token_iter)
             .map_err(|err| err.with_source(source))?;
-        if token_iter.next().is_some() {
-            todo!("didn't exhaust tokens / extra input");
+        match token_iter.next() {
+            // Input exhausted, yay!
+            None => Ok(value),
+            // ...wait, there's more?
+            Some((_, span)) => Err(XmlErrorType::ExpectedEnd
+                .with_span(span.start..source.len())
+                .with_source(source)),
         }
-        Ok(value)
     }
 }
 
