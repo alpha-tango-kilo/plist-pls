@@ -45,6 +45,8 @@ pub enum XmlSourceError {
     #[default]
     #[error("unlexable content")]
     Unlexable,
+    #[error("an empty {0} doesn't make sense")]
+    WeirdEmpty(PlistTag),
     // Only used by pushers/poppers
     #[error("mismatched open & close tags: <{0}>...</{1}>")]
     MismatchedOpenClose(PlistTag, PlistTag),
@@ -91,6 +93,8 @@ pub(crate) enum XmlToken<'a> {
     PlistHeader(&'a str),
     #[token("</plist>")]
     EndPlist,
+    #[token("<plist/>")]
+    EmptyPlist,
     // Collections
     #[token("<array>", push_array)]
     StartArray,
@@ -102,33 +106,35 @@ pub(crate) enum XmlToken<'a> {
     EndArray,
     #[token("</dict>", pop_dictionary)]
     EndDictionary,
+    #[token("<array/>")]
+    EmptyArray,
+    #[token("<dict/>")]
+    EmptyDictionary,
     // Basic values
     #[token("<true/>", |_| true)]
     #[token("<false/>", |_| false)]
     Bool(bool),
     #[token("<data>", gobble_data)]
+    #[token("<data/>", weird_empty_data)]
     Data(Data<'a>),
     #[token("<date>", gobble_date)]
+    #[token("<date/>", weird_empty_date)]
     Date(Date),
     #[token("<float>", gobble_float)]
+    #[token("<float/>", weird_empty_float)]
     Float(f64),
     #[token("<integer>", gobble_integer)]
+    #[token("<integer/>", weird_empty_integer)]
     Integer(Integer),
     #[token("<real>", gobble_real)]
+    #[token("<real/>", weird_empty_real)]
     Real(f64),
     #[token("<string>", gobble_string)]
+    #[token("<string/>", |_| "")]
     String(&'a str),
     #[token("<uid>", gobble_uid)]
+    #[token("<uid/>", weird_empty_uid)]
     Uid(Uid),
-    #[token("<array/>", |_| PlistTag::Array)]
-    #[token("<dict/>", |_| PlistTag::Dictionary)]
-    #[token("<data/>", |_| PlistTag::Data)]
-    #[token("<date/>", |_| PlistTag::Date)]
-    #[token("<real/>", |_| PlistTag::Real)]
-    #[token("<integer/>", |_| PlistTag::Integer)]
-    #[token("<string/>", |_| PlistTag::String)]
-    #[token("<float/>", |_| PlistTag::Float)]
-    EmptyTag(PlistTag),
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -272,6 +278,29 @@ fn gobble_data<'a>(
     lexer.bump(close_tag_start + TAG.len());
     let content = &rest[..close_tag_start];
     Ok(content.into())
+}
+
+macro_rules! weird_empty_impls {
+    ($($pt:ident $(,)?)+) => {
+        ::paste::paste! {
+            $(
+                fn [<weird_empty_ $pt:snake>]<'a, T>(
+                    lex: &mut ::logos::Lexer<'a, XmlToken<'a>>
+                ) -> Result<T, LexError> {
+                    Err(XmlSourceError::WeirdEmpty(PlistTag::$pt).with_span(lex.span()))
+                }
+            )+
+        }
+    };
+}
+
+weird_empty_impls! {
+    Data,
+    Date,
+    Float,
+    Integer,
+    Real,
+    Uid,
 }
 
 macro_rules! push_pop_collection_impls {

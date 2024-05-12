@@ -60,6 +60,7 @@ impl<'a> Value<'a> {
             XmlToken::DocTypeHeader => todo!(),
             XmlToken::PlistHeader(_) => todo!(),
             XmlToken::EndPlist => todo!(),
+            XmlToken::EmptyPlist => todo!(),
             // Collections
             XmlToken::StartArray => {
                 let mut array = Array::new();
@@ -98,6 +99,10 @@ impl<'a> Value<'a> {
             XmlToken::Key(_) => todo!(),
             XmlToken::EndArray => todo!(),
             XmlToken::EndDictionary => todo!(),
+            XmlToken::EmptyArray => Ok((Array::default().into(), token_iter)),
+            XmlToken::EmptyDictionary => {
+                Ok((Dictionary::default().into(), token_iter))
+            },
             // Basic values
             XmlToken::Bool(value) => Ok((value.into(), token_iter)),
             XmlToken::Data(value) => Ok((value.into(), token_iter)),
@@ -107,10 +112,10 @@ impl<'a> Value<'a> {
             XmlToken::Real(value) => Ok((Value::Real(value), token_iter)),
             XmlToken::String(value) => Ok((value.into(), token_iter)),
             XmlToken::Uid(value) => Ok((value.into(), token_iter)),
-            XmlToken::EmptyTag(_) => todo!(),
         }
     }
 
+    // TODO: collections can be simple values... ugh
     fn parse_simple_value(xml_token: XmlToken<'a>) -> Result<Self, LexError> {
         match xml_token {
             XmlToken::String(string) => Ok(string.into()),
@@ -132,9 +137,7 @@ impl<'a> Value<'a> {
             XmlToken::EndArray => todo!("unexpected"),
             XmlToken::EndDictionary => todo!("unexpected"),
             XmlToken::EndPlist => todo!("unexpected"),
-            XmlToken::EmptyTag(_) => {
-                todo!("rework and remove these")
-            },
+            _ => todo!(),
         }
     }
 }
