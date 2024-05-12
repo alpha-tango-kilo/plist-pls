@@ -11,7 +11,6 @@ use crate::{Data, Date, Integer, Uid};
 pub(crate) struct LexError(XmlSourceError, Option<Span>);
 
 impl LexError {
-    #[cfg(test)] // will be used in main code once the full parser is written
     pub(crate) fn with_source(self, source: &str) -> XmlParseSourceError {
         let LexError(inner, span) = self;
         XmlParseSourceError {
@@ -77,6 +76,7 @@ pub(crate) struct Extra {
 #[derive(Logos, Copy, Clone, Debug, PartialEq)]
 #[logos(skip r"[ \t\r\n\f]+", extras = Extra, error = LexError)]
 pub(crate) enum XmlToken<'a> {
+    // Boilerplate
     #[regex(
         r#"<\?xml\s+version\s*=\s*"([^"]*)"\s*encoding\s*=\s*"([^"]*)"\s*\?>"#,
         XmlHeaderInner::parse_from_lexer
@@ -89,32 +89,37 @@ pub(crate) enum XmlToken<'a> {
         parse_plist_version_from_lexer
     )]
     PlistHeader(&'a str),
+    #[token("</plist>")]
+    EndPlist,
+    // Collections
     #[token("<array>", push_array)]
     StartArray,
     #[token("<dict>", push_dictionary)]
     StartDictionary,
-    #[token("<string>", gobble_string)]
-    String(&'a str),
-    #[token("<data>", gobble_data)]
-    Data(Data<'a>),
-    #[token("<date>", gobble_date)]
-    Date(Date),
-    #[token("<real>", gobble_real)]
-    Real(f64),
-    #[token("<integer>", gobble_integer)]
-    Integer(Integer),
-    #[token("<float>", gobble_float)]
-    Float(f64),
-    #[token("<uid>", gobble_uid)]
-    Uid(Uid),
     #[token("<key>", gobble_key)]
     Key(&'a str),
     #[token("</array>", pop_array)]
     EndArray,
     #[token("</dict>", pop_dictionary)]
     EndDictionary,
-    #[token("</plist>")]
-    EndPlist,
+    // Basic values
+    #[token("<true/>", |_| true)]
+    #[token("<false/>", |_| false)]
+    Bool(bool),
+    #[token("<data>", gobble_data)]
+    Data(Data<'a>),
+    #[token("<date>", gobble_date)]
+    Date(Date),
+    #[token("<float>", gobble_float)]
+    Float(f64),
+    #[token("<integer>", gobble_integer)]
+    Integer(Integer),
+    #[token("<real>", gobble_real)]
+    Real(f64),
+    #[token("<string>", gobble_string)]
+    String(&'a str),
+    #[token("<uid>", gobble_uid)]
+    Uid(Uid),
     #[token("<array/>", |_| PlistTag::Array)]
     #[token("<dict/>", |_| PlistTag::Dictionary)]
     #[token("<data/>", |_| PlistTag::Data)]
@@ -124,9 +129,6 @@ pub(crate) enum XmlToken<'a> {
     #[token("<string/>", |_| PlistTag::String)]
     #[token("<float/>", |_| PlistTag::Float)]
     EmptyTag(PlistTag),
-    #[token("<true/>", |_| true)]
-    #[token("<false/>", |_| false)]
-    Bool(bool),
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

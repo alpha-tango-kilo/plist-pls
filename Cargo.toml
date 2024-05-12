@@ -11,6 +11,7 @@ repository = "https://codeberg.org/alpha-tango-kilo/plist-pls"
 
 [dependencies]
 base64 = "0.22"
+indexmap = "2.2"
 iter-read = "1"
 logos = "0.14"
 miette = "7.2"

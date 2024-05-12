@@ -1,29 +1,207 @@
-use std::{io, io::Read, num::IntErrorKind, str::FromStr, time::SystemTime};
+use std::{
+    io, io::Read, iter::Peekable, num::IntErrorKind, str::FromStr,
+    time::SystemTime,
+};
 
 use base64::{prelude::BASE64_STANDARD, read::DecoderReader};
+use indexmap::IndexMap;
 use iter_read::IterRead;
+use logos::{Logos, SpannedIter};
 use thiserror::Error;
 use time::{
     format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset,
 };
 
+use crate::xml::{LexError, XmlParseSourceError, XmlToken};
+
 mod xml;
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+type XmlTokenIter<'a> = Peekable<SpannedIter<'a, XmlToken<'a>>>;
+type ParsialResult<'a, T, E> = Result<(T, XmlTokenIter<'a>), E>;
+
+pub type Array<'a> = Vec<Value<'a>>;
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value<'a> {
-    Array(&'a [Value<'a>]),
+    Array(Array<'a>),
     Dictionary(Dictionary<'a>),
     Boolean(bool),
-    Data(&'a [u8]),
+    Data(Data<'a>),
     Date(Date),
-    Real(f64),
+    Float(f64),
     Integer(Integer),
+    Real(f64),
     String(&'a str),
     Uid(Uid),
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct Dictionary<'a>(&'a [(&'a str, Value<'a>)]);
+impl<'a> Value<'a> {
+    pub fn from_xml_str(
+        source: &'a str,
+    ) -> Result<Self, XmlParseSourceError<'a>> {
+        let token_iter = XmlToken::lexer(source).spanned().peekable();
+        let (value, mut remainder) = Value::from_xml_tokens(token_iter)
+            .map_err(|err| err.with_source(source))?;
+        if remainder.next().is_some() {
+            panic!("didn't exhaust tokens / extra input");
+        }
+        Ok(value)
+    }
+
+    fn from_xml_tokens(
+        mut token_iter: XmlTokenIter<'a>,
+    ) -> ParsialResult<Self, LexError> {
+        let (first, _span) =
+            token_iter.next().ok_or_else(|| panic!("empty value"))?;
+        let first = first?;
+        match first {
+            // Boilerplate
+            XmlToken::XmlHeader(_) => todo!(),
+            XmlToken::DocTypeHeader => todo!(),
+            XmlToken::PlistHeader(_) => todo!(),
+            XmlToken::EndPlist => todo!(),
+            // Collections
+            XmlToken::StartArray => {
+                let mut array = Array::new();
+                for (token_res, _span) in token_iter.by_ref() {
+                    let token = token_res?;
+                    if matches!(token, XmlToken::EndArray) {
+                        break;
+                    }
+                    let value = Self::parse_simple_value(token)?;
+                    array.push(value);
+                }
+                Ok((array.into(), token_iter))
+            },
+            XmlToken::StartDictionary => {
+                let mut dict = Dictionary::new();
+                let mut current_key = None;
+                for (token_res, _span) in token_iter.by_ref() {
+                    let token = token_res?;
+                    match current_key.take() {
+                        None => {
+                            if let XmlToken::Key(key) = token {
+                                current_key = Some(key);
+                            } else {
+                                todo!("no key error");
+                            }
+                        },
+                        Some(key) => {
+                            // TODO: could add more context to the error here?
+                            let value = Self::parse_simple_value(token)?;
+                            dict.insert(key, value);
+                        },
+                    }
+                }
+                Ok((dict.into(), token_iter))
+            },
+            XmlToken::Key(_) => todo!(),
+            XmlToken::EndArray => todo!(),
+            XmlToken::EndDictionary => todo!(),
+            // Basic values
+            XmlToken::Bool(value) => Ok((value.into(), token_iter)),
+            XmlToken::Data(value) => Ok((value.into(), token_iter)),
+            XmlToken::Date(value) => Ok((value.into(), token_iter)),
+            XmlToken::Integer(value) => Ok((value.into(), token_iter)),
+            XmlToken::Float(value) => Ok((Value::Float(value), token_iter)),
+            XmlToken::Real(value) => Ok((Value::Real(value), token_iter)),
+            XmlToken::String(value) => Ok((value.into(), token_iter)),
+            XmlToken::Uid(value) => Ok((value.into(), token_iter)),
+            XmlToken::EmptyTag(_) => todo!(),
+        }
+    }
+
+    fn parse_simple_value(xml_token: XmlToken<'a>) -> Result<Self, LexError> {
+        match xml_token {
+            XmlToken::String(string) => Ok(string.into()),
+            XmlToken::Data(data) => Ok(data.into()),
+            XmlToken::Date(date) => Ok(date.into()),
+            XmlToken::Real(real) => Ok(Value::Real(real)),
+            XmlToken::Integer(int) => Ok(int.into()),
+            XmlToken::Float(float) => Ok(Value::Float(float)),
+            XmlToken::Uid(uid) => Ok(uid.into()),
+            XmlToken::Bool(bool) => Ok(bool.into()),
+            XmlToken::XmlHeader(_) => todo!("unexpected"),
+            XmlToken::DocTypeHeader => todo!("unexpected"),
+            XmlToken::PlistHeader(_) => todo!("unexpected"),
+            XmlToken::StartArray => todo!("unexpected"),
+            XmlToken::StartDictionary => todo!("unexpected"),
+            XmlToken::Key(_) => {
+                todo!("unexpected")
+            },
+            XmlToken::EndArray => todo!("unexpected"),
+            XmlToken::EndDictionary => todo!("unexpected"),
+            XmlToken::EndPlist => todo!("unexpected"),
+            XmlToken::EmptyTag(_) => {
+                todo!("rework and remove these")
+            },
+        }
+    }
+}
+
+macro_rules! into_value_impls {
+    // Lifetimeless
+    ($ty:ident $(,)?) => {
+        impl From<$ty> for Value<'_> {
+            fn from(value: $ty) -> Self {
+                Value::$ty(value)
+            }
+        }
+    };
+    // Generic lifetime
+    ($ty:ident < $lt:lifetime > $(,)?) => {
+        impl<$lt> From<$ty<$lt>> for Value<$lt> {
+            fn from(value: $ty<$lt>) -> Self {
+                Value::$ty(value)
+            }
+        }
+    };
+    // Recurse, recurse!
+    ($ty:ident, $($tt:tt)+) => {
+        into_value_impls! { $ty }
+        into_value_impls! { $($tt)+ }
+    };
+    ($ty:ident < $lt:lifetime >, $($tt:tt)+) => {
+        into_value_impls! { $ty<$lt> }
+        into_value_impls! { $($tt)+ }
+    };
+}
+
+into_value_impls! {
+    Array<'a>,
+    Dictionary<'a>,
+    Data<'a>,
+    Date,
+    Integer,
+    Uid,
+}
+
+impl From<bool> for Value<'_> {
+    fn from(value: bool) -> Self {
+        Value::Boolean(value)
+    }
+}
+
+impl<'a> From<&'a str> for Value<'a> {
+    fn from(value: &'a str) -> Self {
+        Value::String(value)
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Dictionary<'a>(IndexMap<&'a str, Value<'a>>);
+
+impl<'a> Dictionary<'a> {
+    #[inline]
+    fn new() -> Self {
+        Self::default()
+    }
+
+    #[inline]
+    fn insert(&mut self, key: &'a str, value: Value<'a>) -> Option<Value<'a>> {
+        self.0.insert(key, value)
+    }
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Date(SystemTime);
