@@ -8,11 +8,11 @@ use thiserror::Error;
 use crate::{Data, Date, Integer, Uid};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub(crate) struct LexError(XmlSourceError, Option<Span>);
+pub(crate) struct XmlError(XmlErrorType, Option<Span>);
 
-impl LexError {
+impl XmlError {
     pub(crate) fn with_source(self, source: &str) -> XmlParseSourceError {
-        let LexError(inner, span) = self;
+        let XmlError(inner, span) = self;
         XmlParseSourceError {
             inner,
             source,
@@ -33,7 +33,7 @@ impl LexError {
 )]
 pub struct XmlParseSourceError<'a> {
     #[source]
-    inner: XmlSourceError,
+    inner: XmlErrorType,
     #[source_code]
     source: &'a str,
     #[label("Error occurred here")]
@@ -41,7 +41,7 @@ pub struct XmlParseSourceError<'a> {
 }
 
 #[derive(Debug, Error, Copy, Clone, Default, PartialEq, Eq)]
-pub enum XmlSourceError {
+pub enum XmlErrorType {
     #[default]
     #[error("unlexable content")]
     Unlexable,
@@ -62,11 +62,14 @@ pub enum XmlSourceError {
         "collections are too deeply nested, only 58-deep collections supported"
     )]
     WeAreInTooDeep,
+    // Higher-level parser errors (not detected by the lexer)
+    #[error("needed key")]
+    MissingKey,
 }
 
-impl XmlSourceError {
-    fn with_span(self, span: Span) -> LexError {
-        LexError(self, Some(span))
+impl XmlErrorType {
+    pub(crate) fn with_span(self, span: Span) -> XmlError {
+        XmlError(self, Some(span))
     }
 }
 
@@ -76,7 +79,7 @@ pub(crate) struct Extra {
 }
 
 #[derive(Logos, Copy, Clone, Debug, PartialEq)]
-#[logos(skip r"[ \t\r\n\f]+", extras = Extra, error = LexError)]
+#[logos(skip r"[ \t\r\n\f]+", extras = Extra, error = XmlError)]
 pub(crate) enum XmlToken<'a> {
     // Boilerplate
     #[regex(
@@ -204,14 +207,14 @@ macro_rules! gobble_impls {
         ::paste::paste! {
             fn [<gobble_ $pt:snake>]<'a>(
                 lexer: &mut ::logos::Lexer<'a, XmlToken<'a>>
-            ) -> ::std::result::Result<$ty, LexError> {
+            ) -> ::std::result::Result<$ty, XmlError> {
                 let rest = lexer.remainder();
                 // Fun footgun: close_tag_start is relative to the remainder,
                 // whereas span_{start,end} are relative to the source
                 let close_tag_start = rest.find($tag).ok_or_else(|| {
                     let span_start = lexer.span().end + 1;
                     let span_end = span_start + rest.len();
-                    XmlSourceError::Unclosed(PlistTag::$pt)
+                    XmlErrorType::Unclosed(PlistTag::$pt)
                         .with_span(span_start..span_end)
                 })?;
                 lexer.bump(close_tag_start + $tag.len());
@@ -219,7 +222,7 @@ macro_rules! gobble_impls {
                 content.parse::<$ty>().map_err(|_| {
                     let span_start = lexer.span().end + 1;
                     let span_end = span_start + rest.len();
-                    XmlSourceError::CouldNotParse(PlistTag::$pt)
+                    XmlErrorType::CouldNotParse(PlistTag::$pt)
                         .with_span(span_start..span_end)
                 })
             }
@@ -230,12 +233,12 @@ macro_rules! gobble_impls {
         ::paste::paste! {
             fn [<gobble_ $pt:snake>]<$lt>(
                 lexer: &mut ::logos::Lexer<$lt, XmlToken<$lt>>
-            ) -> ::std::result::Result<&$lt $ty, LexError> {
+            ) -> ::std::result::Result<&$lt $ty, XmlError> {
                 let rest = lexer.remainder();
                 let close_tag_start = rest.find($tag).ok_or_else(|| {
                     let span_start = lexer.span().end + 1;
                     let span_end = span_start + rest.len();
-                    XmlSourceError::Unclosed(PlistTag::$pt)
+                    XmlErrorType::Unclosed(PlistTag::$pt)
                         .with_span(span_start..span_end)
                 })?;
                 lexer.bump(close_tag_start + $tag.len());
@@ -267,13 +270,13 @@ gobble_impls! {
 
 fn gobble_data<'a>(
     lexer: &mut Lexer<'a, XmlToken<'a>>,
-) -> Result<Data<'a>, LexError> {
+) -> Result<Data<'a>, XmlError> {
     const TAG: &str = "</data>";
     let rest = lexer.remainder();
     let close_tag_start = rest.find(TAG).ok_or_else(|| {
         let span_start = lexer.span().end + 1;
         let span_end = span_start + rest.len();
-        XmlSourceError::Unclosed(PlistTag::Data).with_span(span_start..span_end)
+        XmlErrorType::Unclosed(PlistTag::Data).with_span(span_start..span_end)
     })?;
     lexer.bump(close_tag_start + TAG.len());
     let content = &rest[..close_tag_start];
@@ -286,8 +289,8 @@ macro_rules! weird_empty_impls {
             $(
                 fn [<weird_empty_ $pt:snake>]<'a, T>(
                     lex: &mut ::logos::Lexer<'a, XmlToken<'a>>
-                ) -> Result<T, LexError> {
-                    Err(XmlSourceError::WeirdEmpty(PlistTag::$pt).with_span(lex.span()))
+                ) -> Result<T, XmlError> {
+                    Err(XmlErrorType::WeirdEmpty(PlistTag::$pt).with_span(lex.span()))
                 }
             )+
         }
@@ -309,7 +312,7 @@ macro_rules! push_pop_collection_impls {
             ::paste::paste! {
                 fn [<push_ $pt>]<'a>(
                     lexer: &mut ::logos::Lexer<'a, XmlToken<'a>>
-                ) -> Result<(), LexError> {
+                ) -> Result<(), XmlError> {
                     lexer
                         .extras
                         .hierarchy
@@ -319,7 +322,7 @@ macro_rules! push_pop_collection_impls {
 
                 fn [<pop_ $pt>]<'a>(
                     lexer: &mut ::logos::Lexer<'a, XmlToken<'a>>
-                ) -> Result<(), LexError> {
+                ) -> Result<(), XmlError> {
                    lexer
                         .extras
                         .hierarchy
@@ -366,7 +369,7 @@ impl HierarchyTracker {
         (self.0 & Self::DEPTH_MASK) as u8
     }
 
-    fn push_array(&mut self) -> Result<(), XmlSourceError> {
+    fn push_array(&mut self) -> Result<(), XmlErrorType> {
         let depth = self.depth();
         if depth < Self::MAX_DEPTH {
             // Push all the stack bits left
@@ -375,11 +378,11 @@ impl HierarchyTracker {
             self.0 = stack + depth as u64 + 1;
             Ok(())
         } else {
-            Err(XmlSourceError::WeAreInTooDeep)
+            Err(XmlErrorType::WeAreInTooDeep)
         }
     }
 
-    fn push_dictionary(&mut self) -> Result<(), XmlSourceError> {
+    fn push_dictionary(&mut self) -> Result<(), XmlErrorType> {
         let depth = self.depth();
         if depth < Self::MAX_DEPTH {
             // Push all the stack bits left
@@ -390,11 +393,11 @@ impl HierarchyTracker {
             self.0 = stack + depth as u64 + 1;
             Ok(())
         } else {
-            Err(XmlSourceError::WeAreInTooDeep)
+            Err(XmlErrorType::WeAreInTooDeep)
         }
     }
 
-    fn pop_array(&mut self) -> Result<(), XmlSourceError> {
+    fn pop_array(&mut self) -> Result<(), XmlErrorType> {
         let depth = self.depth();
         if depth > 0 {
             let is_array = self.0 & Self::DICTIONARY_MASK == 0;
@@ -405,17 +408,17 @@ impl HierarchyTracker {
                 self.0 = stack + depth as u64 - 1;
                 Ok(())
             } else {
-                Err(XmlSourceError::MismatchedOpenClose(
+                Err(XmlErrorType::MismatchedOpenClose(
                     PlistTag::Dictionary,
                     PlistTag::Array,
                 ))
             }
         } else {
-            Err(XmlSourceError::LonelyClose(PlistTag::Array))
+            Err(XmlErrorType::LonelyClose(PlistTag::Array))
         }
     }
 
-    fn pop_dictionary(&mut self) -> Result<(), XmlSourceError> {
+    fn pop_dictionary(&mut self) -> Result<(), XmlErrorType> {
         let depth = self.depth();
         if depth > 0 {
             let is_dictionary =
@@ -426,13 +429,13 @@ impl HierarchyTracker {
                 self.0 = stack + depth as u64 - 1;
                 Ok(())
             } else {
-                Err(XmlSourceError::MismatchedOpenClose(
+                Err(XmlErrorType::MismatchedOpenClose(
                     PlistTag::Array,
                     PlistTag::Dictionary,
                 ))
             }
         } else {
-            Err(XmlSourceError::LonelyClose(PlistTag::Dictionary))
+            Err(XmlErrorType::LonelyClose(PlistTag::Dictionary))
         }
     }
 }
@@ -513,7 +516,7 @@ mod unit_tests {
         print_miette(&err.clone().with_source(input));
         assert_eq!(
             err,
-            XmlSourceError::Unclosed(PlistTag::String).with_span(9..31),
+            XmlErrorType::Unclosed(PlistTag::String).with_span(9..31),
         );
     }
 
@@ -578,11 +581,11 @@ mod unit_tests {
             let mut hierarchy = HierarchyTracker::default();
             assert_eq!(
                 hierarchy.pop_array(),
-                Err(XmlSourceError::LonelyClose(PlistTag::Array))
+                Err(XmlErrorType::LonelyClose(PlistTag::Array))
             );
             assert_eq!(
                 hierarchy.pop_dictionary(),
-                Err(XmlSourceError::LonelyClose(PlistTag::Dictionary))
+                Err(XmlErrorType::LonelyClose(PlistTag::Dictionary))
             );
         }
 

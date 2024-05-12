@@ -12,7 +12,7 @@ use time::{
     format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset,
 };
 
-use crate::xml::{LexError, XmlParseSourceError, XmlToken};
+use crate::xml::{XmlError, XmlErrorType, XmlParseSourceError, XmlToken};
 
 mod xml;
 
@@ -50,7 +50,7 @@ impl<'a> Value<'a> {
 
     fn from_xml_tokens(
         mut token_iter: XmlTokenIter<'a>,
-    ) -> ParsialResult<Self, LexError> {
+    ) -> ParsialResult<Self, XmlError> {
         let (first, _span) =
             token_iter.next().ok_or_else(|| panic!("empty value"))?;
         let first = first?;
@@ -77,14 +77,16 @@ impl<'a> Value<'a> {
             XmlToken::StartDictionary => {
                 let mut dict = Dictionary::new();
                 let mut current_key = None;
-                for (token_res, _span) in token_iter.by_ref() {
+                for (token_res, span) in token_iter.by_ref() {
                     let token = token_res?;
                     match current_key.take() {
                         None => {
                             if let XmlToken::Key(key) = token {
                                 current_key = Some(key);
                             } else {
-                                todo!("no key error");
+                                return Err(
+                                    XmlErrorType::MissingKey.with_span(span)
+                                );
                             }
                         },
                         Some(key) => {
@@ -116,7 +118,7 @@ impl<'a> Value<'a> {
     }
 
     // TODO: collections can be simple values... ugh
-    fn parse_simple_value(xml_token: XmlToken<'a>) -> Result<Self, LexError> {
+    fn parse_simple_value(xml_token: XmlToken<'a>) -> Result<Self, XmlError> {
         match xml_token {
             XmlToken::String(string) => Ok(string.into()),
             XmlToken::Data(data) => Ok(data.into()),
