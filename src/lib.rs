@@ -1,4 +1,7 @@
-use std::{io, io::Read, num::IntErrorKind, str::FromStr, time::SystemTime};
+use std::{
+    io, io::Read, iter::Peekable, num::IntErrorKind, str::FromStr,
+    time::SystemTime,
+};
 
 use base64::{prelude::BASE64_STANDARD, read::DecoderReader};
 use indexmap::IndexMap;
@@ -13,9 +16,7 @@ use crate::xml::{XmlError, XmlErrorType, XmlParseSourceError, XmlToken};
 
 mod xml;
 
-type TokenIter<'source, Token> = SpannedIter<'source, Token>;
-type ParsialResult<'source, Type, Token, Error> =
-    Result<(Type, TokenIter<'source, Token>), Error>;
+type TokenIter<'source, Token> = Peekable<SpannedIter<'source, Token>>;
 
 pub type Array<'a> = Vec<Value<'a>>;
 
@@ -37,31 +38,13 @@ impl<'a> Value<'a> {
     pub fn from_xml_str(
         source: &'a str,
     ) -> Result<Self, XmlParseSourceError<'a>> {
-        let token_iter = XmlToken::lexer(source).spanned();
-        let (value, mut remainder) = Value::build_from_tokens(token_iter)
+        let mut token_iter = XmlToken::lexer(source).spanned().peekable();
+        let value = Value::build_from_tokens(&mut token_iter)
             .map_err(|err| err.with_source(source))?;
-        if remainder.next().is_some() {
-            panic!("didn't exhaust tokens / extra input");
+        if token_iter.next().is_some() {
+            todo!("didn't exhaust tokens / extra input");
         }
         Ok(value)
-    }
-
-    // TODO: collections can be simple values... ugh
-    #[deprecated = "you need to use build_from_tokens"]
-    fn parse_simple_value(
-        xml_token: XmlToken<'a>,
-    ) -> Result<Self, XmlErrorType> {
-        match xml_token {
-            XmlToken::String(string) => Ok(string.into()),
-            XmlToken::Data(data) => Ok(data.into()),
-            XmlToken::Date(date) => Ok(date.into()),
-            XmlToken::Real(real) => Ok(Value::Real(real)),
-            XmlToken::Integer(int) => Ok(int.into()),
-            XmlToken::Float(float) => Ok(Value::Float(float)),
-            XmlToken::Uid(uid) => Ok(uid.into()),
-            XmlToken::Bool(bool) => Ok(bool.into()),
-            _ => Err(XmlErrorType::ExpectedValue),
-        }
     }
 }
 
@@ -69,44 +52,30 @@ impl<'a> BuildFromLexer<'a, XmlToken<'a>> for Value<'a> {
     type Error = XmlError;
 
     fn build_from_tokens(
-        mut token_iter: SpannedIter<'a, XmlToken<'a>>,
-    ) -> ParsialResult<Self, XmlToken<'a>, Self::Error> {
-        // I hope you love cursed method signatures
-        // This complicated looking thing simply takes a parse result of
-        // something that can be made into a value and makes it into a value
-        fn valueify<'b, V>(
-            result: ParsialResult<'b, V, XmlToken<'b>, XmlError>,
-        ) -> ParsialResult<'b, Value<'b>, XmlToken<'b>, XmlError>
-        where
-            V: Into<Value<'b>>,
-        {
-            result.map(|(valuable, span)| (valuable.into(), span))
-        }
-
+        token_iter: &mut TokenIter<'a, XmlToken<'a>>,
+    ) -> Result<Self, Self::Error> {
         let (first, span) =
             token_iter.next().ok_or_else(|| panic!("empty value"))?;
         let first = first?;
         match first {
             // Collections
             XmlToken::StartArray => {
-                valueify(Array::build_from_tokens(token_iter))
+                Array::build_from_tokens(token_iter).map(Into::into)
             },
             XmlToken::StartDictionary => {
-                valueify(Dictionary::build_from_tokens(token_iter))
+                Dictionary::build_from_tokens(token_iter).map(Into::into)
             },
-            XmlToken::EmptyArray => Ok((Array::default().into(), token_iter)),
-            XmlToken::EmptyDictionary => {
-                Ok((Dictionary::default().into(), token_iter))
-            },
+            XmlToken::EmptyArray => Ok(Array::default().into()),
+            XmlToken::EmptyDictionary => Ok(Dictionary::default().into()),
             // Basic values
-            XmlToken::Bool(value) => Ok((value.into(), token_iter)),
-            XmlToken::Data(value) => Ok((value.into(), token_iter)),
-            XmlToken::Date(value) => Ok((value.into(), token_iter)),
-            XmlToken::Integer(value) => Ok((value.into(), token_iter)),
-            XmlToken::Float(value) => Ok((Value::Float(value), token_iter)),
-            XmlToken::Real(value) => Ok((Value::Real(value), token_iter)),
-            XmlToken::String(value) => Ok((value.into(), token_iter)),
-            XmlToken::Uid(value) => Ok((value.into(), token_iter)),
+            XmlToken::Bool(value) => Ok(value.into()),
+            XmlToken::Data(value) => Ok(value.into()),
+            XmlToken::Date(value) => Ok(value.into()),
+            XmlToken::Integer(value) => Ok(value.into()),
+            XmlToken::Float(value) => Ok(Value::Float(value)),
+            XmlToken::Real(value) => Ok(Value::Real(value)),
+            XmlToken::String(value) => Ok(value.into()),
+            XmlToken::Uid(value) => Ok(value.into()),
             // "Why is this here you weirdo?"
             XmlToken::XmlHeader(_)
             | XmlToken::DocTypeHeader
@@ -190,28 +159,23 @@ impl<'a> BuildFromLexer<'a, XmlToken<'a>> for Dictionary<'a> {
     type Error = XmlError;
 
     fn build_from_tokens(
-        mut token_iter: SpannedIter<'a, XmlToken<'a>>,
-    ) -> ParsialResult<Self, XmlToken<'a>, Self::Error> {
+        token_iter: &mut TokenIter<'a, XmlToken<'a>>,
+    ) -> Result<Self, Self::Error> {
+        // Assumes XmlToken::StartDictionary has already been consumed (how else
+        // would the caller know we need this impl?)
         let mut dict = Dictionary::new();
-        let mut current_key = None;
-        for (token_res, span) in token_iter.by_ref() {
-            let token = token_res?;
-            match current_key.take() {
-                None => {
-                    if let XmlToken::Key(key) = token {
-                        current_key = Some(key);
-                    } else {
-                        return Err(XmlErrorType::MissingKey.with_span(span));
-                    }
-                },
-                Some(key) => {
-                    let value = Value::parse_simple_value(token)
-                        .map_err(|err| err.with_span(span))?;
-                    dict.insert(key, value);
-                },
-            }
+        loop {
+            let (token, span) =
+                token_iter.next().ok_or_else(|| todo!("unexpected end"))?;
+            let token = token?;
+            let key = match token {
+                XmlToken::Key(key) => key,
+                XmlToken::EndDictionary => return Ok(dict),
+                _ => return Err(XmlErrorType::MissingKey.with_span(span)),
+            };
+            let value = Value::build_from_tokens(token_iter)?;
+            dict.insert(key, value);
         }
-        Ok((dict, token_iter))
     }
 }
 
@@ -341,21 +305,36 @@ impl<'a> BuildFromLexer<'a, XmlToken<'a>> for Array<'a> {
     type Error = XmlError;
 
     fn build_from_tokens(
-        mut token_iter: SpannedIter<'a, XmlToken<'a>>,
-    ) -> ParsialResult<Self, XmlToken<'a>, Self::Error> {
+        token_iter: &mut TokenIter<'a, XmlToken<'a>>,
+    ) -> Result<Self, Self::Error> {
         // Assumes XmlToken::StartArray has already been consumed (how else
         // would the caller know we need this impl?)
         let mut array = Array::new();
-        for (token_res, span) in token_iter.by_ref() {
-            let token = token_res?;
-            if matches!(token, XmlToken::EndArray) {
-                break;
+        loop {
+            let (peeked_token_res, _) =
+                token_iter.peek().ok_or_else(|| todo!("unexpected end"))?;
+            match peeked_token_res {
+                Ok(XmlToken::EndArray) => {
+                    token_iter.next();
+                    return Ok(array);
+                },
+                Err(_) => {
+                    // SAFETY: trusting that peek is correctly implemented -
+                    // according to it there is a next value and it's an error
+                    return Err(unsafe {
+                        token_iter
+                            .next()
+                            .unwrap_unchecked()
+                            .0
+                            .unwrap_err_unchecked()
+                    });
+                },
+                Ok(_) => {
+                    let value = Value::build_from_tokens(token_iter)?;
+                    array.push(value);
+                },
             }
-            let value = Value::parse_simple_value(token)
-                .map_err(|err| err.with_span(span))?;
-            array.push(value);
         }
-        Ok((array, token_iter))
     }
 }
 
@@ -367,6 +346,6 @@ where
     type Error;
 
     fn build_from_tokens(
-        token_iter: SpannedIter<'source, Token>,
-    ) -> ParsialResult<Self, Token, Self::Error>;
+        token_iter: &mut TokenIter<'source, Token>,
+    ) -> Result<Self, Self::Error>;
 }
