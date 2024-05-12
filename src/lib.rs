@@ -1,7 +1,4 @@
-use std::{
-    io, io::Read, iter::Peekable, num::IntErrorKind, str::FromStr,
-    time::SystemTime,
-};
+use std::{io, io::Read, num::IntErrorKind, str::FromStr, time::SystemTime};
 
 use base64::{prelude::BASE64_STANDARD, read::DecoderReader};
 use indexmap::IndexMap;
@@ -16,8 +13,9 @@ use crate::xml::{XmlError, XmlErrorType, XmlParseSourceError, XmlToken};
 
 mod xml;
 
-type XmlTokenIter<'a> = Peekable<SpannedIter<'a, XmlToken<'a>>>;
-type ParsialResult<'a, T, E> = Result<(T, XmlTokenIter<'a>), E>;
+type TokenIter<'source, Token> = SpannedIter<'source, Token>;
+type ParsialResult<'source, Type, Token, Error> =
+    Result<(Type, TokenIter<'source, Token>), Error>;
 
 pub type Array<'a> = Vec<Value<'a>>;
 
@@ -39,8 +37,8 @@ impl<'a> Value<'a> {
     pub fn from_xml_str(
         source: &'a str,
     ) -> Result<Self, XmlParseSourceError<'a>> {
-        let token_iter = XmlToken::lexer(source).spanned().peekable();
-        let (value, mut remainder) = Value::from_xml_tokens(token_iter)
+        let token_iter = XmlToken::lexer(source).spanned();
+        let (value, mut remainder) = Value::build_from_tokens(token_iter)
             .map_err(|err| err.with_source(source))?;
         if remainder.next().is_some() {
             panic!("didn't exhaust tokens / extra input");
@@ -48,9 +46,30 @@ impl<'a> Value<'a> {
         Ok(value)
     }
 
-    fn from_xml_tokens(
-        mut token_iter: XmlTokenIter<'a>,
-    ) -> ParsialResult<Self, XmlError> {
+    // TODO: collections can be simple values... ugh
+    fn parse_simple_value(
+        xml_token: XmlToken<'a>,
+    ) -> Result<Self, XmlErrorType> {
+        match xml_token {
+            XmlToken::String(string) => Ok(string.into()),
+            XmlToken::Data(data) => Ok(data.into()),
+            XmlToken::Date(date) => Ok(date.into()),
+            XmlToken::Real(real) => Ok(Value::Real(real)),
+            XmlToken::Integer(int) => Ok(int.into()),
+            XmlToken::Float(float) => Ok(Value::Float(float)),
+            XmlToken::Uid(uid) => Ok(uid.into()),
+            XmlToken::Bool(bool) => Ok(bool.into()),
+            _ => Err(XmlErrorType::ExpectedValue),
+        }
+    }
+}
+
+impl<'a> BuildFromLexer<'a, XmlToken<'a>> for Value<'a> {
+    type Error = XmlError;
+
+    fn build_from_tokens(
+        mut token_iter: SpannedIter<'a, XmlToken<'a>>,
+    ) -> ParsialResult<Self, XmlToken<'a>, Self::Error> {
         let (first, span) =
             token_iter.next().ok_or_else(|| panic!("empty value"))?;
         let first = first?;
@@ -117,23 +136,6 @@ impl<'a> Value<'a> {
             | XmlToken::EndDictionary => {
                 Err(XmlErrorType::ExpectedValue.with_span(span))
             },
-        }
-    }
-
-    // TODO: collections can be simple values... ugh
-    fn parse_simple_value(
-        xml_token: XmlToken<'a>,
-    ) -> Result<Self, XmlErrorType> {
-        match xml_token {
-            XmlToken::String(string) => Ok(string.into()),
-            XmlToken::Data(data) => Ok(data.into()),
-            XmlToken::Date(date) => Ok(date.into()),
-            XmlToken::Real(real) => Ok(Value::Real(real)),
-            XmlToken::Integer(int) => Ok(int.into()),
-            XmlToken::Float(float) => Ok(Value::Float(float)),
-            XmlToken::Uid(uid) => Ok(uid.into()),
-            XmlToken::Bool(bool) => Ok(bool.into()),
-            _ => Err(XmlErrorType::ExpectedValue),
         }
     }
 }
@@ -322,4 +324,17 @@ impl<'a> From<&'a str> for Data<'a> {
             encoded: value.trim(),
         }
     }
+}
+
+trait BuildFromLexer<'source, Token>
+where
+    Token: logos::Logos<'source>,
+{
+    type Error;
+
+    fn build_from_tokens(
+        token_iter: SpannedIter<'source, Token>,
+    ) -> ParsialResult<Self, Token, Self::Error>
+    where
+        Self: Sized;
 }
