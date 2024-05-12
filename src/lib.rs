@@ -51,25 +51,20 @@ impl<'a> Value<'a> {
     fn from_xml_tokens(
         mut token_iter: XmlTokenIter<'a>,
     ) -> ParsialResult<Self, XmlError> {
-        let (first, _span) =
+        let (first, span) =
             token_iter.next().ok_or_else(|| panic!("empty value"))?;
         let first = first?;
         match first {
-            // Boilerplate
-            XmlToken::XmlHeader(_) => todo!(),
-            XmlToken::DocTypeHeader => todo!(),
-            XmlToken::PlistHeader(_) => todo!(),
-            XmlToken::EndPlist => todo!(),
-            XmlToken::EmptyPlist => todo!(),
             // Collections
             XmlToken::StartArray => {
                 let mut array = Array::new();
-                for (token_res, _span) in token_iter.by_ref() {
+                for (token_res, span) in token_iter.by_ref() {
                     let token = token_res?;
                     if matches!(token, XmlToken::EndArray) {
                         break;
                     }
-                    let value = Self::parse_simple_value(token)?;
+                    let value = Self::parse_simple_value(token)
+                        .map_err(|err| err.with_span(span))?;
                     array.push(value);
                 }
                 Ok((array.into(), token_iter))
@@ -90,17 +85,14 @@ impl<'a> Value<'a> {
                             }
                         },
                         Some(key) => {
-                            // TODO: could add more context to the error here?
-                            let value = Self::parse_simple_value(token)?;
+                            let value = Self::parse_simple_value(token)
+                                .map_err(|err| err.with_span(span))?;
                             dict.insert(key, value);
                         },
                     }
                 }
                 Ok((dict.into(), token_iter))
             },
-            XmlToken::Key(_) => todo!(),
-            XmlToken::EndArray => todo!(),
-            XmlToken::EndDictionary => todo!(),
             XmlToken::EmptyArray => Ok((Array::default().into(), token_iter)),
             XmlToken::EmptyDictionary => {
                 Ok((Dictionary::default().into(), token_iter))
@@ -114,11 +106,24 @@ impl<'a> Value<'a> {
             XmlToken::Real(value) => Ok((Value::Real(value), token_iter)),
             XmlToken::String(value) => Ok((value.into(), token_iter)),
             XmlToken::Uid(value) => Ok((value.into(), token_iter)),
+            // "Why is this here you weirdo?"
+            XmlToken::XmlHeader(_)
+            | XmlToken::DocTypeHeader
+            | XmlToken::PlistHeader(_)
+            | XmlToken::EndPlist
+            | XmlToken::EmptyPlist
+            | XmlToken::Key(_)
+            | XmlToken::EndArray
+            | XmlToken::EndDictionary => {
+                Err(XmlErrorType::ExpectedValue.with_span(span))
+            },
         }
     }
 
     // TODO: collections can be simple values... ugh
-    fn parse_simple_value(xml_token: XmlToken<'a>) -> Result<Self, XmlError> {
+    fn parse_simple_value(
+        xml_token: XmlToken<'a>,
+    ) -> Result<Self, XmlErrorType> {
         match xml_token {
             XmlToken::String(string) => Ok(string.into()),
             XmlToken::Data(data) => Ok(data.into()),
@@ -128,18 +133,7 @@ impl<'a> Value<'a> {
             XmlToken::Float(float) => Ok(Value::Float(float)),
             XmlToken::Uid(uid) => Ok(uid.into()),
             XmlToken::Bool(bool) => Ok(bool.into()),
-            XmlToken::XmlHeader(_) => todo!("unexpected"),
-            XmlToken::DocTypeHeader => todo!("unexpected"),
-            XmlToken::PlistHeader(_) => todo!("unexpected"),
-            XmlToken::StartArray => todo!("unexpected"),
-            XmlToken::StartDictionary => todo!("unexpected"),
-            XmlToken::Key(_) => {
-                todo!("unexpected")
-            },
-            XmlToken::EndArray => todo!("unexpected"),
-            XmlToken::EndDictionary => todo!("unexpected"),
-            XmlToken::EndPlist => todo!("unexpected"),
-            _ => todo!(),
+            _ => Err(XmlErrorType::ExpectedValue),
         }
     }
 }

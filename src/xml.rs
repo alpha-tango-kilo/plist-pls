@@ -65,6 +65,8 @@ pub enum XmlErrorType {
     // Higher-level parser errors (not detected by the lexer)
     #[error("needed key")]
     MissingKey,
+    #[error("expected value")]
+    ExpectedValue,
 }
 
 impl XmlErrorType {
