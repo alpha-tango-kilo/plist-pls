@@ -47,6 +47,7 @@ impl<'a> Value<'a> {
     }
 
     // TODO: collections can be simple values... ugh
+    #[deprecated = "you need to use build_from_tokens"]
     fn parse_simple_value(
         xml_token: XmlToken<'a>,
     ) -> Result<Self, XmlErrorType> {
@@ -70,47 +71,28 @@ impl<'a> BuildFromLexer<'a, XmlToken<'a>> for Value<'a> {
     fn build_from_tokens(
         mut token_iter: SpannedIter<'a, XmlToken<'a>>,
     ) -> ParsialResult<Self, XmlToken<'a>, Self::Error> {
+        // I hope you love cursed method signatures
+        // This complicated looking thing simply takes a parse result of
+        // something that can be made into a value and makes it into a value
+        fn valueify<'b, V>(
+            result: ParsialResult<'b, V, XmlToken<'b>, XmlError>,
+        ) -> ParsialResult<'b, Value<'b>, XmlToken<'b>, XmlError>
+        where
+            V: Into<Value<'b>>,
+        {
+            result.map(|(valuable, span)| (valuable.into(), span))
+        }
+
         let (first, span) =
             token_iter.next().ok_or_else(|| panic!("empty value"))?;
         let first = first?;
         match first {
             // Collections
             XmlToken::StartArray => {
-                let mut array = Array::new();
-                for (token_res, span) in token_iter.by_ref() {
-                    let token = token_res?;
-                    if matches!(token, XmlToken::EndArray) {
-                        break;
-                    }
-                    let value = Self::parse_simple_value(token)
-                        .map_err(|err| err.with_span(span))?;
-                    array.push(value);
-                }
-                Ok((array.into(), token_iter))
+                valueify(Array::build_from_tokens(token_iter))
             },
             XmlToken::StartDictionary => {
-                let mut dict = Dictionary::new();
-                let mut current_key = None;
-                for (token_res, span) in token_iter.by_ref() {
-                    let token = token_res?;
-                    match current_key.take() {
-                        None => {
-                            if let XmlToken::Key(key) = token {
-                                current_key = Some(key);
-                            } else {
-                                return Err(
-                                    XmlErrorType::MissingKey.with_span(span)
-                                );
-                            }
-                        },
-                        Some(key) => {
-                            let value = Self::parse_simple_value(token)
-                                .map_err(|err| err.with_span(span))?;
-                            dict.insert(key, value);
-                        },
-                    }
-                }
-                Ok((dict.into(), token_iter))
+                valueify(Dictionary::build_from_tokens(token_iter))
             },
             XmlToken::EmptyArray => Ok((Array::default().into(), token_iter)),
             XmlToken::EmptyDictionary => {
@@ -201,6 +183,35 @@ impl<'a> Dictionary<'a> {
     #[inline]
     fn insert(&mut self, key: &'a str, value: Value<'a>) -> Option<Value<'a>> {
         self.0.insert(key, value)
+    }
+}
+
+impl<'a> BuildFromLexer<'a, XmlToken<'a>> for Dictionary<'a> {
+    type Error = XmlError;
+
+    fn build_from_tokens(
+        mut token_iter: SpannedIter<'a, XmlToken<'a>>,
+    ) -> ParsialResult<Self, XmlToken<'a>, Self::Error> {
+        let mut dict = Dictionary::new();
+        let mut current_key = None;
+        for (token_res, span) in token_iter.by_ref() {
+            let token = token_res?;
+            match current_key.take() {
+                None => {
+                    if let XmlToken::Key(key) = token {
+                        current_key = Some(key);
+                    } else {
+                        return Err(XmlErrorType::MissingKey.with_span(span));
+                    }
+                },
+                Some(key) => {
+                    let value = Value::parse_simple_value(token)
+                        .map_err(|err| err.with_span(span))?;
+                    dict.insert(key, value);
+                },
+            }
+        }
+        Ok((dict, token_iter))
     }
 }
 
@@ -326,15 +337,36 @@ impl<'a> From<&'a str> for Data<'a> {
     }
 }
 
+impl<'a> BuildFromLexer<'a, XmlToken<'a>> for Array<'a> {
+    type Error = XmlError;
+
+    fn build_from_tokens(
+        mut token_iter: SpannedIter<'a, XmlToken<'a>>,
+    ) -> ParsialResult<Self, XmlToken<'a>, Self::Error> {
+        // Assumes XmlToken::StartArray has already been consumed (how else
+        // would the caller know we need this impl?)
+        let mut array = Array::new();
+        for (token_res, span) in token_iter.by_ref() {
+            let token = token_res?;
+            if matches!(token, XmlToken::EndArray) {
+                break;
+            }
+            let value = Value::parse_simple_value(token)
+                .map_err(|err| err.with_span(span))?;
+            array.push(value);
+        }
+        Ok((array, token_iter))
+    }
+}
+
 trait BuildFromLexer<'source, Token>
 where
+    Self: Sized,
     Token: logos::Logos<'source>,
 {
     type Error;
 
     fn build_from_tokens(
         token_iter: SpannedIter<'source, Token>,
-    ) -> ParsialResult<Self, Token, Self::Error>
-    where
-        Self: Sized;
+    ) -> ParsialResult<Self, Token, Self::Error>;
 }
