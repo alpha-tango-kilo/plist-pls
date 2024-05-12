@@ -1,3 +1,11 @@
+#![deny(
+    unsafe_op_in_unsafe_fn,
+    clippy::undocumented_unsafe_blocks,
+    rustdoc::broken_intra_doc_links
+)]
+// #![warn(missing_docs)]
+#![doc = include_str!("../README.md")]
+
 use std::{
     io, io::Read, iter::Peekable, num::IntErrorKind, str::FromStr,
     time::SystemTime,
