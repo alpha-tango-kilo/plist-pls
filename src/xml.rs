@@ -229,6 +229,7 @@ macro_rules! gobble_impls {
                 })?;
                 lexer.bump(close_tag_start + $tag.len());
                 let content = &rest[..close_tag_start];
+                // TODO: don't drop the parse error
                 content.parse::<$ty>().map_err(|_| {
                     let span_start = lexer.span().end + 1;
                     let span_end = span_start + rest.len();
@@ -278,6 +279,7 @@ gobble_impls! {
     Key: &'a str => "</key>",
 }
 
+// Uses TryInto instead of FromStr or AsRef, so this one's handwritten
 fn gobble_data<'a>(
     lexer: &mut Lexer<'a, XmlToken<'a>>,
 ) -> Result<Data<'a>, XmlError> {
@@ -290,7 +292,10 @@ fn gobble_data<'a>(
     })?;
     lexer.bump(close_tag_start + TAG.len());
     let content = &rest[..close_tag_start];
-    Ok(content.into())
+    // TODO: keep error
+    content.try_into().map_err(|_| {
+        XmlErrorType::CouldNotParse(PlistTag::Data).with_span(lexer.span())
+    })
 }
 
 macro_rules! weird_empty_impls {

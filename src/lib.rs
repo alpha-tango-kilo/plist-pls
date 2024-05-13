@@ -289,29 +289,88 @@ pub struct Data<'a> {
     encoded: &'a str,
 }
 
+#[derive(Debug, Error, Copy, Clone, PartialEq, Eq)]
+pub enum ValidateDataError {
+    #[error("data contains an illegal character")]
+    IllegalCharacter(char),
+    #[error("data is corrupt or missing padding")]
+    Corrupt,
+    #[error("'=' found midway through string")]
+    PaddingNotAtEnd,
+}
+
 #[derive(Debug, Error)]
 #[error(transparent)]
 pub struct DecodeDataError(io::Error);
 
 impl Data<'_> {
+    pub fn validate(&self, padded: bool) -> Result<(), ValidateDataError> {
+        let mut padding_started = false;
+        let mut padding_char_count = 0usize;
+        let mut data_char_count = 0usize;
+        for char in self.encoded.chars() {
+            if char.is_ascii_whitespace() {
+                continue;
+            }
+            if !padding_started {
+                match char {
+                    'A'..='Z' | 'a'..='z' | '0'..='9' | '+' | '/' => {
+                        data_char_count += 1
+                    },
+                    '=' if padded => {
+                        padding_started = true;
+                        padding_char_count = 1;
+                    },
+                    illegal => {
+                        return Err(ValidateDataError::IllegalCharacter(
+                            illegal,
+                        ))
+                    },
+                }
+            } else if char != '=' {
+                return Err(ValidateDataError::PaddingNotAtEnd);
+            } else {
+                padding_char_count += 1;
+            }
+        }
+
+        if padded {
+            // Each base64 character represents 6 bits, and we expect a whole
+            // number of bytes (with padded base64)
+            // The Python base64 impl doesn't care if there's more padding than
+            // needed, so we won't either
+            let needed_padding = (data_char_count * 6) % 8;
+            if needed_padding > padding_char_count {
+                return Err(ValidateDataError::Corrupt);
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn decode(&self) -> Result<Vec<u8>, DecodeDataError> {
-        let mut reader = IterRead::new(
+        let reader = IterRead::new(
             self.encoded
                 .bytes()
                 .filter(|byte| !byte.is_ascii_whitespace()),
         );
         let mut buf = Vec::new();
-        let mut decoder = DecoderReader::new(&mut reader, &BASE64_STANDARD);
+        let mut decoder = DecoderReader::new(reader, &BASE64_STANDARD);
         decoder.read_to_end(&mut buf).map_err(DecodeDataError)?;
         Ok(buf)
     }
 }
 
-impl<'a> From<&'a str> for Data<'a> {
-    fn from(value: &'a str) -> Self {
-        Self {
+impl<'a> TryFrom<&'a str> for Data<'a> {
+    type Error = ValidateDataError;
+
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        let me = Self {
             encoded: value.trim(),
-        }
+        };
+        // Python's impl for plists requires padding
+        me.validate(true)?;
+        Ok(me)
     }
 }
 
