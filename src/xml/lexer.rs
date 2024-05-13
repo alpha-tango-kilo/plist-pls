@@ -1,92 +1,12 @@
 use std::fmt;
 
-use logos::{Lexer, Logos, Span};
-use miette::{Diagnostic, SourceSpan};
+use logos::{Lexer, Logos};
 use regex::Regex;
-use thiserror::Error;
 
-use crate::{Data, Date, Integer, Uid};
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub(crate) struct XmlError(XmlErrorType, Option<Span>);
-
-impl XmlError {
-    pub(crate) const fn new(r#type: XmlErrorType) -> Self {
-        Self(r#type, None)
-    }
-
-    pub(crate) fn with_source(self, source: &str) -> XmlParseSourceError {
-        let XmlError(inner, span) = self;
-        XmlParseSourceError {
-            inner,
-            source,
-            span: span.map(Into::into),
-        }
-    }
-}
-
-#[derive(Debug, Error, Diagnostic)]
-#[error("failed to parse XML")]
-#[cfg_attr(test, diagnostic(help("this is probably a bug your dumbass wrote")))]
-#[cfg_attr(
-    not(test),
-    diagnostic(
-        code(plist_pls::xml),
-        help("this is probably a problem with your plist file")
-    )
-)]
-pub struct XmlParseSourceError<'a> {
-    #[source]
-    inner: XmlErrorType,
-    #[source_code]
-    source: &'a str,
-    #[label("Error occurred here")]
-    span: Option<SourceSpan>,
-}
-
-#[derive(Debug, Error, Copy, Clone, Default, PartialEq, Eq)]
-pub enum XmlErrorType {
-    #[default]
-    #[error("unlexable content")]
-    Unlexable,
-    #[error("an empty {0} doesn't make sense")]
-    WeirdEmpty(PlistTag),
-    // Only used by pushers/poppers
-    #[error("mismatched open & close tags: <{0}>...</{1}>")]
-    MismatchedOpenClose(PlistTag, PlistTag),
-    #[error("closing </{0}> with no opening tag")]
-    LonelyClose(PlistTag),
-    // Only used by gobblers
-    #[error("unclosed <{0}>")]
-    Unclosed(PlistTag),
-    #[error("could not parse as {0}")]
-    CouldNotParse(PlistTag),
-    // Only used by collections
-    #[error(
-        "collections are too deeply nested, only 58-deep collections supported"
-    )]
-    WeAreInTooDeep,
-    // Higher-level parser errors (not detected by the lexer)
-    #[error("needed key")]
-    MissingKey,
-    #[error("expected value")]
-    ExpectedValue,
-    #[error("input ended unexpectedly")]
-    UnexpectedEnd,
-    #[error("unwanted extra content")]
-    ExpectedEnd,
-}
-
-impl XmlErrorType {
-    pub(crate) fn with_span(self, span: Span) -> XmlError {
-        XmlError(self, Some(span))
-    }
-}
-
-#[derive(Debug, Default)]
-pub(crate) struct Extra {
-    hierarchy: HierarchyTracker,
-}
+use crate::{
+    xml::{XmlError, XmlErrorType, XmlHeaderInner},
+    Data, Date, Integer, Uid,
+};
 
 #[derive(Logos, Copy, Clone, Debug, PartialEq)]
 #[logos(skip r"[ \t\r\n\f]+", extras = Extra, error = XmlError)]
@@ -151,36 +71,6 @@ pub(crate) enum XmlToken<'a> {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct XmlHeaderInner<'a> {
-    pub version: &'a str,
-    pub encoding: &'a str,
-}
-
-impl<'a> XmlHeaderInner<'a> {
-    fn parse_from_lexer(lex: &mut Lexer<'a, XmlToken<'a>>) -> Self {
-        let regex = Regex::new(r#"<\?xml\s+version\s*=\s*"([^"]*)"\s*encoding\s*=\s*"([^"]*)"\s*\?>"#).unwrap();
-        let Some((_full, [version, encoding])) =
-            regex.captures(lex.slice()).map(|caps| caps.extract())
-        else {
-            panic!("regex should have already been matched by lexer")
-        };
-        XmlHeaderInner { version, encoding }
-    }
-}
-
-fn parse_plist_version_from_lexer<'a>(
-    lex: &mut Lexer<'a, XmlToken<'a>>,
-) -> &'a str {
-    let regex = Regex::new(r#"<plist\s+version\s*=\s*"([^"]+)"\s*>"#).unwrap();
-    regex
-        .captures(lex.slice())
-        .expect("regex should have already been matched by lexer")
-        .get(1)
-        .unwrap()
-        .as_str()
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub(crate) enum PlistTag {
     Array,
     Dictionary,
@@ -209,6 +99,23 @@ impl fmt::Display for PlistTag {
             PlistTag::Key => f.write_str("key"),
         }
     }
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct Extra {
+    hierarchy: HierarchyTracker,
+}
+
+fn parse_plist_version_from_lexer<'a>(
+    lex: &mut Lexer<'a, XmlToken<'a>>,
+) -> &'a str {
+    let regex = Regex::new(r#"<plist\s+version\s*=\s*"([^"]+)"\s*>"#).unwrap();
+    regex
+        .captures(lex.slice())
+        .expect("regex should have already been matched by lexer")
+        .get(1)
+        .unwrap()
+        .as_str()
 }
 
 macro_rules! gobble_impls {
@@ -480,7 +387,8 @@ impl fmt::Debug for HierarchyTracker {
 
 #[cfg(test)]
 mod unit_tests {
-    use miette::GraphicalReportHandler;
+    use logos::Logos;
+    use miette::{Diagnostic, GraphicalReportHandler};
 
     use super::*;
 
@@ -546,7 +454,7 @@ mod unit_tests {
 
     #[test]
     fn whole_file() {
-        let input = include_str!("../test_data/xml.plist");
+        let input = include_str!("../../test_data/xml.plist");
         let lexed = should_lex(input);
         println!("{lexed:#?}");
         assert_eq!(lexed, vec![
@@ -569,7 +477,9 @@ mod unit_tests {
             XmlToken::Key("Height"),
             XmlToken::Real(1.6),
             XmlToken::Key("Data"),
-            XmlToken::Data("\n\t\tAAAAvgAAAA\n\t\tMAAAAeAAAA\n\t".into()),
+            XmlToken::Data(
+                "\n\t\tAAAAvgAAAA\n\t\tMAAAAeAAAA\n\t".try_into().unwrap(),
+            ),
             XmlToken::Key("Birthdate"),
             XmlToken::Date("1981-05-16T11:32:06Z".parse().unwrap()),
             XmlToken::Key("Blank"),
