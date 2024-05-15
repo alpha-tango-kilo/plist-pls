@@ -4,7 +4,7 @@ use logos::{Lexer, Logos};
 use regex::Regex;
 
 use crate::{
-    xml::{XmlError, XmlErrorType, XmlHeaderInner},
+    xml::{XmlError, XmlErrorType, XmlHeader},
     Data, Date, Integer, Uid,
 };
 
@@ -14,9 +14,9 @@ pub(crate) enum XmlToken<'a> {
     // Boilerplate
     #[regex(
         r#"<\?xml\s+version\s*=\s*"([^"]*)"\s*encoding\s*=\s*"([^"]*)"\s*\?>"#,
-        XmlHeaderInner::parse_from_lexer
+        XmlHeader::parse_from_lexer
     )]
-    XmlHeader(XmlHeaderInner<'a>),
+    XmlHeader(XmlHeader<'a>),
     #[token(r#"<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">"#)]
     DocTypeHeader,
     #[regex(
@@ -71,7 +71,7 @@ pub(crate) enum XmlToken<'a> {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub(crate) enum PlistTag {
+pub enum PlistTag {
     Array,
     Dictionary,
     Data,
@@ -458,7 +458,7 @@ mod unit_tests {
         let lexed = should_lex(input);
         println!("{lexed:#?}");
         assert_eq!(lexed, vec![
-            XmlToken::XmlHeader(XmlHeaderInner {
+            XmlToken::XmlHeader(XmlHeader {
                 version: "1.0",
                 encoding: "UTF-8",
             }),

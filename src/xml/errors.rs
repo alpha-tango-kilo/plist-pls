@@ -16,11 +16,11 @@ use crate::xml::lexer::PlistTag;
 )]
 pub struct XmlParseSourceError<'a> {
     #[source]
-    inner: XmlErrorType,
+    pub(crate) inner: XmlErrorType,
     #[source_code]
-    source: &'a str,
+    pub(crate) source: &'a str,
     #[label("Error occurred here")]
-    span: Option<SourceSpan>,
+    pub(crate) span: Option<SourceSpan>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -72,6 +72,8 @@ pub enum XmlErrorType {
     UnexpectedEnd,
     #[error("unwanted extra content")]
     ExpectedEnd,
+    #[error("missing XML plist headers")]
+    MissingHeader,
 }
 
 impl XmlErrorType {
