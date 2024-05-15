@@ -316,3 +316,13 @@ where
         token_iter: &mut TokenIter<'source, Token>,
     ) -> Result<Self, Self::Error>;
 }
+
+// Part of public API so I can use it in integration tests
+#[doc(hidden)]
+pub fn print_miette(err: &dyn miette::Diagnostic) {
+    let mut report = String::new();
+    miette::GraphicalReportHandler::new()
+        .render_report(&mut report, err)
+        .expect("failed to render miette report");
+    eprintln!("\n{}", report.trim_end());
+}

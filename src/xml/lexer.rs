@@ -388,17 +388,9 @@ impl fmt::Debug for HierarchyTracker {
 #[cfg(test)]
 mod unit_tests {
     use logos::Logos;
-    use miette::{Diagnostic, GraphicalReportHandler};
 
     use super::*;
-
-    fn print_miette(err: &dyn Diagnostic) {
-        let mut report = String::new();
-        GraphicalReportHandler::new()
-            .render_report(&mut report, err)
-            .expect("failed to render miette report");
-        eprintln!("\n{}", report.trim_end());
-    }
+    use crate::print_miette;
 
     fn should_lex(input: &str) -> Vec<XmlToken> {
         let mut tokens = vec![];
