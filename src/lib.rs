@@ -7,7 +7,7 @@
 #![doc = include_str!("../README.md")]
 
 use std::{
-    io, io::Read, iter::Peekable, num::IntErrorKind, str::FromStr,
+    fmt, io, io::Read, iter::Peekable, num::IntErrorKind, str::FromStr,
     time::SystemTime,
 };
 
@@ -107,7 +107,7 @@ impl<'a> From<&'a str> for Value<'a> {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq)]
 pub struct Dictionary<'a>(IndexMap<&'a str, Value<'a>>);
 
 impl<'a> Dictionary<'a> {
@@ -119,6 +119,12 @@ impl<'a> Dictionary<'a> {
     #[inline]
     fn insert(&mut self, key: &'a str, value: Value<'a>) -> Option<Value<'a>> {
         self.0.insert(key, value)
+    }
+}
+
+impl fmt::Debug for Dictionary<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
     }
 }
 
