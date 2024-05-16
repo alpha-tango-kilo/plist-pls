@@ -317,12 +317,31 @@ where
     ) -> Result<Self, Self::Error>;
 }
 
-// Part of public API so I can use it in integration tests
-#[doc(hidden)]
-pub fn print_miette(err: &dyn miette::Diagnostic) {
+#[cfg(test)]
+pub(crate) fn print_miette(err: &dyn miette::Diagnostic) {
     let mut report = String::new();
     miette::GraphicalReportHandler::new()
         .render_report(&mut report, err)
         .expect("failed to render miette report");
     eprintln!("\n{}", report.trim_end());
+}
+
+// Can't be a proper integration test or else I don't get dev-dependencies
+// (which I want for miette reports)
+#[cfg(test)]
+mod integration_tests {
+    use crate::{print_miette, xml::XmlDocument};
+
+    #[test]
+    fn whole_doc() {
+        let source = include_str!("../test_data/xml.plist");
+        let doc = match XmlDocument::from_str(source) {
+            Ok(doc) => doc,
+            Err(why) => {
+                print_miette(&why);
+                panic!("should load document");
+            },
+        };
+        eprintln!("{doc:#?}");
+    }
 }
