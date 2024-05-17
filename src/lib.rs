@@ -3,7 +3,7 @@
     clippy::undocumented_unsafe_blocks,
     rustdoc::broken_intra_doc_links
 )]
-// #![warn(missing_docs)]
+#![warn(missing_docs)]
 #![doc = include_str!("../README.md")]
 
 use std::{
@@ -24,25 +24,43 @@ use crate::xml::{XmlErrorType, XmlParseSourceError, XmlToken};
 
 /// Contains [`Dictionary`] and its associated types
 pub mod dictionary;
+
+/// Contains XML-specific types
 pub mod xml;
 
+/// A plist array
 pub type Array<'a> = Vec<Value<'a>>;
 
+/// Any plist value
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value<'a> {
+    /// An array
     Array(Array<'a>),
+    /// A dictionary
     Dictionary(Dictionary<'a>),
+    /// A boolean
     Boolean(bool),
+    /// Arbitrary base64-encoded data
     Data(Data<'a>),
+    /// A date
     Date(Date),
+    /// A float
     Float(f64),
+    /// An integer
     Integer(Integer),
+    /// A real
     Real(f64),
+    /// A string
     String(&'a str),
+    /// A unique identifer
     Uid(Uid),
 }
 
 impl<'a> Value<'a> {
+    /// Reads a `Value` from an XML string
+    ///
+    /// If you are parsing a full document, consider
+    /// [`XmlDocument`](xml::XmlDocument)
     pub fn from_xml_str(
         source: &'a str,
     ) -> Result<Self, XmlParseSourceError<'a>> {
@@ -109,6 +127,9 @@ impl<'a> From<&'a str> for Value<'a> {
     }
 }
 
+/// A plist date
+///
+/// Represented on disk as a UTC timestamp
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Date(SystemTime);
 
@@ -118,6 +139,7 @@ impl From<SystemTime> for Date {
     }
 }
 
+/// The error encountered when parsing a [`Date`]
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 #[error(transparent)]
 pub struct ParseDateError(time::error::Parse);
@@ -133,6 +155,9 @@ impl FromStr for Date {
     }
 }
 
+/// A plist integer
+///
+/// Stores values within `i64::MIN..=u64::MAX`
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Integer(i128);
 
@@ -148,6 +173,9 @@ impl From<i64> for Integer {
     }
 }
 
+// TODO: TryFrom<Integer> impls for u64/i64
+
+/// The error encountered when parsing an [`Integer`]
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 #[error(transparent)]
 pub struct ParseIntegerError(std::num::ParseIntError);
@@ -178,7 +206,9 @@ impl FromStr for Integer {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+/// A plist unique identifier, found exclusively in plists created by
+/// `NSKeyedArchiver`
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Uid(u64);
 
 impl From<u64> for Uid {
@@ -187,6 +217,7 @@ impl From<u64> for Uid {
     }
 }
 
+/// The error encountered when parsing a [`Uid`]
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 #[error(transparent)]
 pub struct ParseUidError(std::num::ParseIntError);
@@ -199,27 +230,39 @@ impl FromStr for Uid {
     }
 }
 
-// TODO: document caveats
+/// A plist data entry - base64-encoded arbitrary bytes
+///
+/// The data is validated, **not decoded** during parsing - the base64 encoding
+/// is expected to be padded. See [`Data::decode`] to access the decoded data
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Data<'a> {
     encoded: &'a str,
 }
 
+/// The error encountered when parsing [`Data`]
 #[derive(Debug, Error, Copy, Clone, PartialEq, Eq)]
 pub enum ValidateDataError {
+    /// The data contains an illegal character
     #[error("data contains an illegal character")]
     IllegalCharacter(char),
+    /// The data is corrupt or missing padding
     #[error("data is corrupt or missing padding")]
     Corrupt,
+    /// An '=' found midway through string
     #[error("'=' found midway through string")]
     PaddingNotAtEnd,
 }
 
+/// The error encountered when decoding [`Data`]
 #[derive(Debug, Error)]
 #[error(transparent)]
 pub struct DecodeDataError(io::Error);
 
 impl Data<'_> {
+    /// Checks the inner encoded base64 string is valid & padded
+    ///
+    /// This method is called during parsing, so you probably don't need to call
+    /// it yourself
     pub fn validate(&self, padded: bool) -> Result<(), ValidateDataError> {
         let mut padding_started = false;
         let mut padding_char_count = 0usize;
@@ -264,6 +307,7 @@ impl Data<'_> {
         Ok(())
     }
 
+    /// Decodes the internal data, returning an allocated buffer
     pub fn decode(&self) -> Result<Vec<u8>, DecodeDataError> {
         let reader = IterRead::new(
             self.encoded
