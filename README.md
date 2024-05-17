@@ -11,3 +11,7 @@ In the longer run, this repository may break into several crates, with the follo
 - ASCII plist syntax highlighting for VSCode
 - ASCII plist formatter
 - (super long term) mutability
+
+Non-aims:
+- Short compile times (I'd rather avoid boilerplate in the source code by using proc macros)
+- Small size footprint
