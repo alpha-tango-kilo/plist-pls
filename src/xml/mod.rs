@@ -3,7 +3,7 @@ mod errors;
 mod lexer;
 
 use logos::{Lexer, Logos, Span};
-use regex::Regex;
+use regex_lite::Regex;
 
 pub use crate::xml::errors::{XmlErrorType, XmlParseSourceError};
 pub(crate) use crate::xml::{errors::XmlError, lexer::XmlToken};

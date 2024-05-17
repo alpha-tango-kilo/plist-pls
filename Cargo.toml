@@ -17,7 +17,7 @@ iter-read = "1"
 logos = "0.14"
 miette = "7.2"
 paste = "1"
-regex = "1.10"
+regex-lite = "0.1.5"
 thiserror = "1"
 time = { version = "0.3", features = ["formatting", "parsing"] }
 

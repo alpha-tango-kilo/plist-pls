@@ -1,7 +1,7 @@
 use std::fmt;
 
 use logos::{Lexer, Logos};
-use regex::Regex;
+use regex_lite::Regex;
 
 use crate::{
     xml::{XmlError, XmlErrorType, XmlHeader},
