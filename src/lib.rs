@@ -184,8 +184,6 @@ impl<'a> Value<'a> {
             _ => None,
         }
     }
-
-    // TODO: to u64/i64
 }
 
 macro_rules! into_value_impls {
@@ -283,7 +281,28 @@ impl From<i64> for Integer {
     }
 }
 
-// TODO: TryFrom<Integer> impls for u64/i64
+/// The error encountered when casting an [`Integer`] to a Rust integer
+/// primitive
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+#[error(transparent)]
+pub struct CastIntegerError(std::num::TryFromIntError);
+
+macro_rules! integer_cast_impls {
+    ($($int:ty)+) => {
+        $(
+            impl TryFrom<Integer> for $int {
+                type Error = CastIntegerError;
+
+                #[inline]
+                fn try_from(value: Integer) -> Result<Self, Self::Error> {
+                    value.0.try_into().map_err(CastIntegerError)
+                }
+            }
+        )+
+    };
+}
+
+integer_cast_impls! { u8 i8 u16 i16 u32 i32 u64 i64 }
 
 /// The error encountered when parsing an [`Integer`]
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
