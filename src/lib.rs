@@ -7,12 +7,12 @@
 #![doc = include_str!("../README.md")]
 
 use std::{
-    io, io::Read, iter::Peekable, num::IntErrorKind, str::FromStr,
+    fmt, io, io::Read, iter::Peekable, num::IntErrorKind, str::FromStr,
     time::SystemTime,
 };
 
 use base64::{prelude::BASE64_STANDARD, read::DecoderReader};
-use derive_more::IsVariant;
+use derive_more::{Display, IsVariant};
 use iter_read::IterRead;
 use logos::{Logos, SpannedIter};
 use thiserror::Error;
@@ -263,10 +263,17 @@ impl FromStr for Date {
     }
 }
 
+impl fmt::Display for Date {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let date_time = OffsetDateTime::from(self.0);
+        Display::fmt(&date_time, f)
+    }
+}
+
 /// A plist integer
 ///
 /// Stores values within `i64::MIN..=u64::MAX`
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Display)]
 pub struct Integer(i128);
 
 macro_rules! integer_from_impls {
