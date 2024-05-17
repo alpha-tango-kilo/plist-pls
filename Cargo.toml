@@ -11,6 +11,7 @@ repository = "https://codeberg.org/alpha-tango-kilo/plist-pls"
 
 [dependencies]
 base64 = "0.22"
+delegate = "0.12"
 indexmap = "2.2"
 iter-read = "1"
 logos = "0.14"
@@ -19,6 +20,15 @@ paste = "1"
 regex = "1.10"
 thiserror = "1"
 time = { version = "0.3", features = ["formatting", "parsing"] }
+
+[dependencies.derive_more]
+version = "=1.0.0-beta.6"
+features = [
+    "index",
+    "index_mut",
+    "into_iterator",
+    # "is_variant",
+]
 
 [dev-dependencies]
 miette = { version = "*", features = ["fancy"] }

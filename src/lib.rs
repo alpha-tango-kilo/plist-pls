@@ -7,12 +7,11 @@
 #![doc = include_str!("../README.md")]
 
 use std::{
-    fmt, io, io::Read, iter::Peekable, num::IntErrorKind, str::FromStr,
+    io, io::Read, iter::Peekable, num::IntErrorKind, str::FromStr,
     time::SystemTime,
 };
 
 use base64::{prelude::BASE64_STANDARD, read::DecoderReader};
-use indexmap::IndexMap;
 use iter_read::IterRead;
 use logos::{Logos, SpannedIter};
 use thiserror::Error;
@@ -20,8 +19,11 @@ use time::{
     format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset,
 };
 
+pub use crate::dictionary::Dictionary;
 use crate::xml::{XmlErrorType, XmlParseSourceError, XmlToken};
 
+/// Contains [`Dictionary`] and its associated types
+pub mod dictionary;
 pub mod xml;
 
 pub type Array<'a> = Vec<Value<'a>>;
@@ -104,27 +106,6 @@ impl From<bool> for Value<'_> {
 impl<'a> From<&'a str> for Value<'a> {
     fn from(value: &'a str) -> Self {
         Value::String(value)
-    }
-}
-
-#[derive(Clone, Default, PartialEq)]
-pub struct Dictionary<'a>(IndexMap<&'a str, Value<'a>>);
-
-impl<'a> Dictionary<'a> {
-    #[inline]
-    fn new() -> Self {
-        Self::default()
-    }
-
-    #[inline]
-    fn insert(&mut self, key: &'a str, value: Value<'a>) -> Option<Value<'a>> {
-        self.0.insert(key, value)
-    }
-}
-
-impl fmt::Debug for Dictionary<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
     }
 }
 
