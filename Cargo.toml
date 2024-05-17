@@ -27,7 +27,7 @@ features = [
     "index",
     "index_mut",
     "into_iterator",
-    # "is_variant",
+    "is_variant",
 ]
 
 [dev-dependencies]

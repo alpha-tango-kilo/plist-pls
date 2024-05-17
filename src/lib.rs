@@ -12,6 +12,7 @@ use std::{
 };
 
 use base64::{prelude::BASE64_STANDARD, read::DecoderReader};
+use derive_more::IsVariant;
 use iter_read::IterRead;
 use logos::{Logos, SpannedIter};
 use thiserror::Error;
@@ -32,7 +33,7 @@ pub mod xml;
 pub type Array<'a> = Vec<Value<'a>>;
 
 /// Any plist value
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, IsVariant)]
 pub enum Value<'a> {
     /// An array
     Array(Array<'a>),
@@ -76,6 +77,115 @@ impl<'a> Value<'a> {
                 .with_source(source)),
         }
     }
+
+    /// Gets a reference to the held [`Array`], if this value is an array
+    pub fn as_array(&self) -> Option<&[Value<'a>]> {
+        match &self {
+            Value::Array(inner) => Some(inner),
+            _ => None,
+        }
+    }
+
+    /// Gets the inner [`Array`], if this value is an array
+    pub fn into_array(self) -> Option<Array<'a>> {
+        match self {
+            Value::Array(inner) => Some(inner),
+            _ => None,
+        }
+    }
+
+    /// Gets a reference to the held [`Dictionary`], if this value is a
+    /// dictionary
+    pub const fn as_dictionary(&self) -> Option<&Dictionary<'a>> {
+        match &self {
+            Value::Dictionary(inner) => Some(inner),
+            _ => None,
+        }
+    }
+
+    /// Gets the inner [`Dictionary`], if this value is a dictionary
+    pub fn into_dictionary(self) -> Option<Dictionary<'a>> {
+        match self {
+            Value::Dictionary(inner) => Some(inner),
+            _ => None,
+        }
+    }
+
+    /// Gets a copy of the inner boolean, if this value is a boolean
+    pub const fn as_boolean(&self) -> Option<bool> {
+        match &self {
+            Value::Boolean(inner) => Some(*inner),
+            _ => None,
+        }
+    }
+
+    /// Gets a copy of the inner [`Data`], if this value is data
+    pub const fn as_data(&self) -> Option<Data<'a>> {
+        match &self {
+            Value::Data(inner) => Some(*inner),
+            _ => None,
+        }
+    }
+
+    /// Gets a copy of the inner [`Date`], if this value is a date
+    pub const fn as_date(&self) -> Option<Date> {
+        match &self {
+            Value::Date(inner) => Some(*inner),
+            _ => None,
+        }
+    }
+
+    /// Gets a copy of the inner float, if this value is a float
+    pub const fn as_float(&self) -> Option<f64> {
+        match &self {
+            Value::Float(inner) => Some(*inner),
+            _ => None,
+        }
+    }
+
+    /// Gets a copy of the inner [`Integer`], if this value is an integer
+    pub const fn as_integer(&self) -> Option<Integer> {
+        match &self {
+            Value::Integer(inner) => Some(*inner),
+            _ => None,
+        }
+    }
+
+    /// Gets a copy of the inner real, if this value is a real one
+    pub const fn as_real(&self) -> Option<f64> {
+        match &self {
+            Value::Real(inner) => Some(*inner),
+            _ => None,
+        }
+    }
+
+    /// Gets a copy of the inner string, if this value is a string
+    pub const fn as_string(&self) -> Option<&str> {
+        match &self {
+            Value::String(inner) => Some(*inner),
+            _ => None,
+        }
+    }
+
+    /// Gets a copy of the inner unique identifier, if this value is a unique
+    /// identifier
+    pub const fn as_uid(&self) -> Option<Uid> {
+        match &self {
+            Value::Uid(inner) => Some(*inner),
+            _ => None,
+        }
+    }
+
+    /// Gets a copy of the inner floating point number (but you don't care if
+    /// it's a real or a float), if this value is a floating point number
+    pub const fn as_float_or_real(&self) -> Option<f64> {
+        match &self {
+            Value::Float(inner) | Value::Real(inner) => Some(*inner),
+            _ => None,
+        }
+    }
+
+    // TODO: to u64/i64
 }
 
 macro_rules! into_value_impls {
