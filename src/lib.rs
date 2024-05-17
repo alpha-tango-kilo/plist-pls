@@ -269,17 +269,19 @@ impl FromStr for Date {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Integer(i128);
 
-impl From<u64> for Integer {
-    fn from(value: u64) -> Self {
-        Integer(value as _)
-    }
+macro_rules! integer_from_impls {
+    ($($int:ty)+) => {
+        $(
+            impl From<$int> for Integer {
+                fn from(value: $int) -> Self {
+                    Integer(value as _)
+                }
+            }
+        )+
+    };
 }
 
-impl From<i64> for Integer {
-    fn from(value: i64) -> Self {
-        Integer(value as _)
-    }
-}
+integer_from_impls! { u8 i8 u16 i16 u32 i32 u64 i64 }
 
 /// The error encountered when casting an [`Integer`] to a Rust integer
 /// primitive
