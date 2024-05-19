@@ -1,0 +1,409 @@
+{
+.appVersion = "3151";
+DisplayStrings = (
+"/infinity"
+);
+copyright = "Copyright 2011 The Montserrat Project Authors (https://github.com/JulietaUla/Montserrat)";
+customParameters = (
+{
+name = license;
+value = "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: http://scripts.sil.org/OFL";
+},
+{
+name = Axes;
+value = (
+{
+Name = Weight;
+Tag = wght;
+}
+);
+},
+{
+name = note;
+value = "strokes\012softsigns\012tick";
+}
+);
+date = "2021-06-21 08:39:08 +0000";
+designer = "Julieta Ulanovsky";
+familyName = Montserrat;
+featurePrefixes = (
+{
+automatic = 1;
+code = "languagesystem DFLT dflt;\012";
+name = Languagesystems;
+}
+);
+fontMaster = (
+{
+alignmentZones = (
+"{742, 3}",
+"{700, 3}",
+"{600, 3}",
+"{559, 3}",
+"{517, 3}",
+"{0, -3}",
+"{-100, -3}",
+"{-194, -3}"
+);
+ascender = 742;
+capHeight = 700;
+customParameters = (
+{
+name = typoAscender;
+value = 968;
+},
+{
+name = typoDescender;
+value = -251;
+},
+{
+name = typoLineGap;
+value = 0;
+},
+{
+name = winAscent;
+value = 1109;
+},
+{
+name = winDescent;
+value = 270;
+},
+{
+name = hheaAscender;
+value = 968;
+},
+{
+name = hheaDescender;
+value = -251;
+},
+{
+name = hheaLineGap;
+value = 0;
+},
+{
+name = paramArea;
+value = "610";
+},
+{
+name = paramDepth;
+value = "30";
+},
+{
+name = paramOver;
+value = "6";
+},
+{
+name = smallCapHeight;
+value = 559;
+}
+);
+descender = -194;
+guideLines = (
+{
+locked = 1;
+position = "{417, -213}";
+}
+);
+horizontalStems = (
+19,
+0,
+0,
+0
+);
+id = UUID0;
+userData = {
+GSCornerRadius = 185;
+GSOffsetHorizontal = 10;
+GSOffsetMakeStroke = 1;
+GSOffsetProportional = 1;
+GSOffsetVertical = -15;
+};
+verticalStems = (
+20,
+0
+);
+weight = Light;
+weightValue = 20;
+xHeight = 517;
+},
+{
+alignmentZones = (
+"{742, 9}",
+"{700, 9}",
+"{600, 9}",
+"{570, 9}",
+"{532, 9}",
+"{0, -9}",
+"{-100, -9}",
+"{-194, -9}"
+);
+ascender = 742;
+capHeight = 700;
+customParameters = (
+{
+name = typoAscender;
+value = 968;
+},
+{
+name = typoDescender;
+value = -251;
+},
+{
+name = typoLineGap;
+value = 0;
+},
+{
+name = winAscent;
+value = 1109;
+},
+{
+name = winDescent;
+value = 270;
+},
+{
+name = hheaAscender;
+value = 968;
+},
+{
+name = hheaDescender;
+value = -251;
+},
+{
+name = hheaLineGap;
+value = 0;
+},
+{
+name = paramArea;
+value = "473";
+},
+{
+name = paramDepth;
+value = "22";
+},
+{
+name = paramOver;
+value = "2";
+},
+{
+name = smallCapHeight;
+value = 570;
+}
+);
+descender = -194;
+guideLines = (
+{
+locked = 1;
+position = "{124, -226}";
+}
+);
+horizontalStems = (
+102,
+98,
+96,
+0
+);
+id = "708134FE-A11E-43C9-84F0-594DA15B6BD1";
+verticalStems = (
+110,
+114
+);
+weight = SemiBold;
+weightValue = 110;
+xHeight = 532;
+},
+{
+alignmentZones = (
+"{742, 16}",
+"{700, 16}",
+"{600, 16}",
+"{582, 16}",
+"{547, 16}",
+"{0, -16}",
+"{-100, -16}",
+"{-194, -16}"
+);
+ascender = 742;
+capHeight = 700;
+customParameters = (
+{
+name = typoAscender;
+value = 968;
+},
+{
+name = typoDescender;
+value = -251;
+},
+{
+name = typoLineGap;
+value = 0;
+},
+{
+name = winAscent;
+value = 1109;
+},
+{
+name = winDescent;
+value = 270;
+},
+{
+name = hheaAscender;
+value = 968;
+},
+{
+name = hheaDescender;
+value = -251;
+},
+{
+name = hheaLineGap;
+value = 0;
+},
+{
+name = paramArea;
+value = "287";
+},
+{
+name = paramDepth;
+value = "12";
+},
+{
+name = paramOver;
+value = "0";
+},
+{
+name = smallCapHeight;
+value = 582;
+}
+);
+descender = -194;
+guideLines = (
+{
+position = "{314, 609}";
+},
+{
+position = "{395, 716}";
+},
+{
+position = "{398, 742}";
+}
+);
+horizontalStems = (
+194,
+190,
+176,
+165
+);
+id = "5DA6E103-6A94-47F2-987D-4952DB8EA68E";
+userData = {
+GSCornerRadius = 61;
+GSOffsetHorizontal = 28;
+GSOffsetPosition = 0;
+GSOffsetProportional = 1;
+GSOffsetVertical = 20;
+};
+verticalStems = (
+236,
+226
+);
+weight = Bold;
+weightValue = 226;
+xHeight = 547;
+}
+);
+glyphs = (
+{
+color = 3;
+glyphname = infinity;
+lastChange = "2023-08-08 16:52:41 +0000";
+layers = (
+{
+layerId = UUID0;
+width = 914;
+},
+{
+layerId = "5DA6E103-6A94-47F2-987D-4952DB8EA68E";
+width = 939;
+},
+{
+layerId = "708134FE-A11E-43C9-84F0-594DA15B6BD1";
+width = 925;
+}
+);
+leftKerningGroup = infinity;
+rightKerningGroup = infinity;
+unicode = 221E;
+},
+{
+glyphname = nan;
+lastChange = "2023-08-08 16:48:12 +0000";
+layers = (
+{
+layerId = UUID0;
+width = 600;
+},
+{
+layerId = "708134FE-A11E-43C9-84F0-594DA15B6BD1";
+width = 600;
+},
+{
+layerId = "5DA6E103-6A94-47F2-987D-4952DB8EA68E";
+width = 600;
+}
+);
+leftKerningGroup = NaN;
+rightKerningGroup = Nan;
+}
+);
+manufacturer = "Julieta Ulanovsky";
+unitsPerEm = 1000;
+userData = {
+GSDimensionPlugin.Dimensions = {
+"1C84A7F3-C40A-4DC1-B8B4-102D183C348F" = {
+HV = 20;
+};
+"5DA6E103-6A94-47F2-987D-4952DB8EA68E" = {
+HH = "194";
+HV = "236";
+OH = "191";
+OV = "238";
+nV = "226";
+nd = "190";
+oH = "176";
+oV = "229";
+tH = "165";
+};
+"708134FE-A11E-43C9-84F0-594DA15B6BD1" = {
+HH = "99";
+HV = "114";
+OH = "102";
+OV = "115";
+nV = "110";
+nd = "98";
+oH = "96";
+oV = "111";
+tH = "90";
+};
+"D46AABC6-AB7D-4C0B-AE2B-3079AD121F41" = {
+HV = 232;
+};
+UUID0 = {
+HH = "19";
+HV = 20;
+OH = "19";
+OV = 20;
+nV = 20;
+nd = "19";
+oH = "19";
+oV = 20;
+tH = 20;
+};
+UUID1 = {
+HH = 150;
+HV = 190;
+OH = 165;
+OV = 200;
+};
+};
+};
+versionMajor = 7;
+versionMinor = 222;
+}

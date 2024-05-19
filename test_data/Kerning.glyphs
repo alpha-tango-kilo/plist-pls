@@ -1,0 +1,186 @@
+{
+.appVersion = "3259";
+.formatVersion = 3;
+DisplayStrings = (
+AB,
+ab,
+"ءا",
+"ٮح"
+);
+date = "2024-05-01 12:48:35 +0000";
+familyName = "New Font";
+fontMaster = (
+{
+id = m01;
+metricValues = (
+{
+over = 16;
+pos = 800;
+},
+{
+over = 16;
+pos = 700;
+},
+{
+over = 16;
+pos = 500;
+},
+{
+over = -16;
+},
+{
+over = -16;
+pos = -200;
+},
+{
+}
+);
+name = Regular;
+}
+);
+glyphs = (
+{
+glyphname = A;
+layers = (
+{
+layerId = m01;
+width = 600;
+}
+);
+unicode = 65;
+},
+{
+glyphname = B;
+lastChange = "2024-05-01 12:48:54 +0000";
+layers = (
+{
+layerId = m01;
+width = 600;
+}
+);
+unicode = 66;
+},
+{
+glyphname = a;
+kernRight = a;
+lastChange = "2024-05-01 13:20:32 +0000";
+layers = (
+{
+layerId = m01;
+width = 600;
+}
+);
+unicode = 97;
+},
+{
+glyphname = b;
+kernLeft = b;
+lastChange = "2024-05-01 13:20:30 +0000";
+layers = (
+{
+layerId = m01;
+width = 600;
+}
+);
+unicode = 98;
+},
+{
+glyphname = "hamza-ar";
+lastChange = "2024-05-01 12:50:59 +0000";
+layers = (
+{
+layerId = m01;
+width = 600;
+}
+);
+unicode = 1569;
+},
+{
+glyphname = "alef-ar";
+layers = (
+{
+layerId = m01;
+width = 600;
+}
+);
+unicode = 1575;
+},
+{
+glyphname = "behDotless-ar";
+kernLeft = beh;
+lastChange = "2024-05-01 13:20:21 +0000";
+layers = (
+{
+layerId = m01;
+width = 600;
+}
+);
+unicode = 1646;
+},
+{
+glyphname = "hah-ar";
+kernRight = hah;
+lastChange = "2024-05-01 13:20:19 +0000";
+layers = (
+{
+layerId = m01;
+width = 600;
+}
+);
+unicode = 1581;
+},
+{
+glyphname = space;
+layers = (
+{
+layerId = m01;
+width = 200;
+}
+);
+unicode = 32;
+}
+);
+kerningLTR = {
+m01 = {
+"@MMK_L_a" = {
+"@MMK_R_b" = -123;
+};
+A = {
+B = -100;
+};
+};
+};
+kerningRTL = {
+m01 = {
+"@MMK_R_beh" = {
+"@MMK_L_hah" = 20;
+};
+"hamza-ar" = {
+"alef-ar" = -234;
+};
+};
+};
+metrics = (
+{
+type = ascender;
+},
+{
+type = "cap height";
+},
+{
+type = "x-height";
+},
+{
+type = baseline;
+},
+{
+type = descender;
+},
+{
+type = "italic angle";
+}
+);
+unitsPerEm = 1000;
+versionMajor = 1;
+versionMinor = 0;
+}

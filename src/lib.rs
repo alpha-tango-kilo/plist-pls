@@ -26,6 +26,8 @@ use crate::xml::{XmlErrorType, XmlParseSourceError, XmlToken};
 /// Contains [`Dictionary`] and its associated types
 pub mod dictionary;
 
+/// Contains ASCII-specific types
+pub mod ascii;
 /// Contains XML-specific types
 pub mod xml;
 
