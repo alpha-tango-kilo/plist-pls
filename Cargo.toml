@@ -23,6 +23,7 @@ time = { version = "0.3", features = ["formatting", "parsing"] }
 
 [dependencies.derive_more]
 version = "=1.0.0-beta.6"
+path = "../derive_more"
 features = [
     "display",
     "index",

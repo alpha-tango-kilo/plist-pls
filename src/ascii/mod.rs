@@ -5,7 +5,6 @@
 use logos::{Lexer, Logos};
 
 // TODO: re-use hierarchy tracker for arrays & dictionaries
-// TODO: data
 #[derive(Logos, Copy, Clone, Debug, PartialEq)]
 #[logos(skip r"[ \t\r\n\f]+")]
 pub(crate) enum AsciiToken<'a> {
@@ -25,8 +24,10 @@ pub(crate) enum AsciiToken<'a> {
     KeyAssign,
     #[token("\"", gobble_quoted_string)]
     QuotedString(&'a str),
+    #[token("<", gobble_data)]
+    Data(&'a str),
     // Anything that's not whitespace or another token
-    #[regex(r#"[^ ({)}=,";\t\r\n\f]+"#)]
+    #[regex(r#"[^ ({)}=,;"<>\t\r\n\f]+"#)]
     Primitive(&'a str),
 }
 
@@ -47,6 +48,26 @@ fn gobble_quoted_string<'a>(
         .ok_or_else(|| todo!("unclosed string"))?;
     lexer.bump(close_quote + 1);
     Ok(&rest[..close_quote])
+}
+
+fn gobble_data<'a>(
+    lexer: &mut Lexer<'a, AsciiToken<'a>>,
+) -> Result<&'a str, ()> {
+    let rest = lexer.remainder();
+    let mut end_index = None;
+    for (index, char) in rest.chars().enumerate() {
+        if char == '>' {
+            end_index = Some(index);
+            break;
+        } else if !(char.is_ascii_whitespace() || char.is_ascii_hexdigit()) {
+            todo!("invalid data char");
+        }
+    }
+    let Some(end_index) = end_index else {
+        todo!("unclosed data")
+    };
+    lexer.bump(end_index + 1);
+    Ok(&rest[..end_index])
 }
 
 #[cfg(test)]
@@ -77,6 +98,14 @@ mod unit_tests {
         let lexed = should_lex(input);
         println!("{lexed:?}");
         assert_eq!(lexed, vec![AsciiToken::QuotedString("Hello world!")]);
+    }
+
+    #[test]
+    fn data() {
+        let input = "<0fbd777 1c2735ae>";
+        let lexed = should_lex(input);
+        println!("{lexed:?}");
+        assert_eq!(lexed, vec![AsciiToken::Data("0fbd777 1c2735ae")]);
     }
 
     #[test]
