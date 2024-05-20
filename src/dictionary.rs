@@ -158,3 +158,35 @@ impl fmt::Debug for Dictionary<'_> {
         self.0.fmt(f)
     }
 }
+
+/// Create a [`Dictionary`] from a list of key-value pairs
+///
+/// ## Example
+///
+/// ```
+/// # use plist_pls::{plist_dict, Value};
+/// let map = plist_dict! {
+///     "a" => true,
+///     "b" => false,
+/// };
+/// assert_eq!(map["a"], Value::from(true));
+/// assert_eq!(map["b"], Value::from(false));
+/// assert_eq!(map.get("c"), None);
+/// ```
+#[macro_export]
+macro_rules! plist_dict {
+    (@single $($x:tt)*) => (());
+    (@count $($rest:expr),*) => (<[()]>::len(&[$($crate::plist_dict!(@single $rest)),*]));
+
+    ($($key:expr => $value:expr,)+) => { $crate::plist_dict!($($key => $value),+) };
+    ($($key:expr => $value:expr),*) => {
+        {
+            let item_count = $crate::plist_dict!(@count $($key),*);
+            let mut _dict = $crate::Dictionary::with_capacity(item_count);
+            $(
+                let _ = _dict.insert($key, $crate::Value::from($value));
+            )*
+            _dict
+        }
+    };
+}

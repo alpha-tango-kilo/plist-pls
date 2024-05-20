@@ -474,6 +474,42 @@ impl<'a> TryFrom<&'a str> for Data<'a> {
     }
 }
 
+/// Create a [`Value::Array`] from a list of values
+///
+/// ## Example
+///
+/// ```
+/// # use plist_pls::{plist_array, Value};
+/// let array = plist_array![true, false];
+/// assert_eq!(array, Value::Array(vec![Value::from(true), Value::from(false)]));
+///
+/// let other_array = plist_array!["hi"; 2];
+/// assert_eq!(other_array, Value::Array(vec![Value::from("hi"), Value::from("hi")]));
+/// ```
+#[macro_export]
+macro_rules! plist_array {
+    (@single $($x:tt)*) => (());
+    (@count $($rest:expr),*) => {
+        <[()]>::len(&[$($crate::plist_array!(@single $rest)),*])
+    };
+
+    ($($value:expr,)+) => { $crate::plist_array!($($value),+) };
+    ($($value:expr),*) => {
+        {
+            let item_count = $crate::plist_array!(@count $($value),*);
+            let mut _array = ::std::vec::Vec::with_capacity(item_count);
+            $(
+                _array.push($crate::Value::from($value));
+            )*
+            $crate::Value::Array(_array)
+        }
+    };
+
+    ($value:expr; $n:expr) => {
+        $crate::Value::Array(::std::vec![$crate::Value::from($value); $n])
+    };
+}
+
 type TokenIter<'source, Token> = Peekable<SpannedIter<'source, Token>>;
 
 trait BuildFromLexer<'source, Token>
