@@ -256,7 +256,6 @@ macro_rules! push_pop_collection_impls {
     };
 }
 
-// Put all variant names from PlistTag declaration
 push_pop_collection_impls! {
     array,
     dictionary,

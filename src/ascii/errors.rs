@@ -1,6 +1,8 @@
 use logos::Span;
 use thiserror::Error;
 
+use crate::CollectionError;
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct AsciiError(AsciiErrorType, Option<Span>);
 
@@ -28,6 +30,9 @@ pub enum AsciiErrorType {
     /// Unclosed data
     #[error("unclosed data")]
     UnclosedData,
+    /// See [`CollectionError`]
+    #[error(transparent)]
+    Collection(#[from] CollectionError),
 }
 
 impl AsciiErrorType {

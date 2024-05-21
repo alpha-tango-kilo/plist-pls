@@ -8,17 +8,19 @@ use errors::AsciiError;
 pub use errors::AsciiErrorType;
 use logos::{Lexer, Logos};
 
+use crate::HierarchyTracker;
+
 // TODO: re-use hierarchy tracker for arrays & dictionaries
 #[derive(Logos, Copy, Clone, Debug, PartialEq)]
-#[logos(skip r"[ \t\r\n\f]+", error = AsciiError)]
+#[logos(skip r"[ \t\r\n\f]+", extras = Extra, error = AsciiError)]
 pub(crate) enum AsciiToken<'a> {
-    #[token("(")]
+    #[token("(", push_array)]
     StartArray,
-    #[token("{")]
+    #[token("{", push_dictionary)]
     StartDictionary,
-    #[token(")")]
+    #[token(")", pop_array)]
     EndArray,
-    #[token("}")]
+    #[token("}", pop_dictionary)]
     EndDictionary,
     #[token(",")]
     ListSeparator,
@@ -33,6 +35,11 @@ pub(crate) enum AsciiToken<'a> {
     // Anything that's not whitespace or another token
     #[regex(r#"[^ ({)}=,;"<>\t\r\n\f]+"#)]
     Primitive(&'a str),
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct Extra {
+    hierarchy: HierarchyTracker,
 }
 
 fn gobble_quoted_string<'a>(
@@ -98,6 +105,39 @@ fn gobble_data<'a>(
     // Plus one to get past the '>'
     lexer.bump(end_index + 1);
     Ok(&rest[..end_index])
+}
+
+macro_rules! push_pop_collection_impls {
+    ($($pt:ident,)+) => {
+        $(
+            ::paste::paste! {
+                fn [<push_ $pt>]<'a>(
+                    lexer: &mut ::logos::Lexer<'a, AsciiToken<'a>>
+                ) -> Result<(), AsciiError> {
+                    lexer
+                        .extras
+                        .hierarchy
+                        .[<push_ $pt>]()
+                        .map_err(|err| AsciiErrorType::from(err).with_span(lexer.span()))
+                }
+
+                fn [<pop_ $pt>]<'a>(
+                    lexer: &mut ::logos::Lexer<'a, AsciiToken<'a>>
+                ) -> Result<(), AsciiError> {
+                   lexer
+                        .extras
+                        .hierarchy
+                        .[<pop_ $pt>]()
+                        .map_err(|err| AsciiErrorType::from(err).with_span(lexer.span()))
+                }
+            }
+        )+
+    };
+}
+
+push_pop_collection_impls! {
+    array,
+    dictionary,
 }
 
 #[cfg(test)]
