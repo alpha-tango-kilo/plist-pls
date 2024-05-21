@@ -2,7 +2,7 @@ use logos::Span;
 use miette::{Diagnostic, SourceSpan};
 use thiserror::Error;
 
-use crate::xml::lexer::PlistTag;
+use crate::{xml::lexer::PlistTag, CollectionError};
 
 /// The error encountered when parsing a [`Value`](crate::Value) or
 /// [`XmlDocument`](super::XmlDocument), annotated with the location in the
@@ -96,11 +96,9 @@ pub enum XmlErrorType {
     CouldNotParse(PlistTag),
 
     // Only used by collections
-    /// Collections more deeply nested than `plist-pls` supports (58-deep)
-    #[error(
-        "collections are too deeply nested, only 58-deep collections supported"
-    )]
-    WeAreInTooDeep,
+    /// See [`CollectionError`]
+    #[error(transparent)]
+    Collection(#[from] CollectionError),
 
     // Higher-level parser errors (not detected by the lexer)
     /// Missing key in a dictionary

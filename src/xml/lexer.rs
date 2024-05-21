@@ -5,7 +5,7 @@ use regex_lite::Regex;
 
 use crate::{
     xml::{XmlError, XmlErrorType, XmlHeader},
-    Data, Date, Integer, Uid,
+    Data, Date, HierarchyTracker, Integer, Uid,
 };
 
 #[derive(Logos, Copy, Clone, Debug, PartialEq)]
@@ -239,7 +239,7 @@ macro_rules! push_pop_collection_impls {
                         .extras
                         .hierarchy
                         .[<push_ $pt>]()
-                        .map_err(|err| err.with_span(lexer.span()))
+                        .map_err(|err| XmlErrorType::from(err).with_span(lexer.span()))
                 }
 
                 fn [<pop_ $pt>]<'a>(
@@ -249,7 +249,7 @@ macro_rules! push_pop_collection_impls {
                         .extras
                         .hierarchy
                         .[<pop_ $pt>]()
-                        .map_err(|err| err.with_span(lexer.span()))
+                        .map_err(|err| XmlErrorType::from(err).with_span(lexer.span()))
                 }
             }
         )+
@@ -260,129 +260,6 @@ macro_rules! push_pop_collection_impls {
 push_pop_collection_impls! {
     array,
     dictionary,
-}
-
-// Oh yeah, it's bit twiddling time
-// 58 most significant bits are an RTL stack, where 0 is array and 1 is
-// dictionary
-// 6 least significant bits depth (i.e. how many arrays/dictionaries we have to
-// close)
-// This means without allocations we can support up to 58-deep nested
-// collections
-//
-// There are two Debug representations: the default just shows the bits, the
-// alternate (#) shows depth & stack separately
-#[derive(Default, Copy, Clone)]
-pub struct HierarchyTracker(u64);
-
-impl HierarchyTracker {
-    const COUNT_BITS: u8 = 6;
-    const DEPTH_MASK: u64 = 0b0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0011_1111;
-    const DICTIONARY_MASK: u64 = 0b0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0100_0000;
-    const MAX_DEPTH: u8 = 58;
-    const STACK_MASK: u64 = !Self::DEPTH_MASK;
-
-    const fn stack(&self) -> u64 {
-        self.0 & Self::STACK_MASK
-    }
-
-    const fn depth(&self) -> u8 {
-        // Keep last 6 bits
-        (self.0 & Self::DEPTH_MASK) as u8
-    }
-
-    fn push_array(&mut self) -> Result<(), XmlErrorType> {
-        let depth = self.depth();
-        if depth < Self::MAX_DEPTH {
-            // Push all the stack bits left
-            let stack = self.stack() << 1;
-            // Add depth + 1 to get new depth
-            self.0 = stack + depth as u64 + 1;
-            Ok(())
-        } else {
-            Err(XmlErrorType::WeAreInTooDeep)
-        }
-    }
-
-    fn push_dictionary(&mut self) -> Result<(), XmlErrorType> {
-        let depth = self.depth();
-        if depth < Self::MAX_DEPTH {
-            // Push all the stack bits left
-            let stack = self.stack() << 1;
-            // Put a dictionary on the top of the stack
-            let stack = stack | Self::DICTIONARY_MASK;
-            // Add depth + 1 to get new depth
-            self.0 = stack + depth as u64 + 1;
-            Ok(())
-        } else {
-            Err(XmlErrorType::WeAreInTooDeep)
-        }
-    }
-
-    fn pop_array(&mut self) -> Result<(), XmlErrorType> {
-        let depth = self.depth();
-        if depth > 0 {
-            let is_array = self.0 & Self::DICTIONARY_MASK == 0;
-            if is_array {
-                // We don't have to unset the array bit (since array **is**
-                // unset), so just rshift the stack
-                let stack = self.stack() >> 1;
-                self.0 = stack + depth as u64 - 1;
-                Ok(())
-            } else {
-                Err(XmlErrorType::MismatchedOpenClose(
-                    PlistTag::Dictionary,
-                    PlistTag::Array,
-                ))
-            }
-        } else {
-            Err(XmlErrorType::LonelyClose(PlistTag::Array))
-        }
-    }
-
-    fn pop_dictionary(&mut self) -> Result<(), XmlErrorType> {
-        let depth = self.depth();
-        if depth > 0 {
-            let is_dictionary =
-                self.0 & Self::DICTIONARY_MASK == Self::DICTIONARY_MASK;
-            if is_dictionary {
-                // Unset the dictionary bit and shift right
-                let stack = (self.stack() ^ Self::DICTIONARY_MASK) >> 1;
-                self.0 = stack + depth as u64 - 1;
-                Ok(())
-            } else {
-                Err(XmlErrorType::MismatchedOpenClose(
-                    PlistTag::Array,
-                    PlistTag::Dictionary,
-                ))
-            }
-        } else {
-            Err(XmlErrorType::LonelyClose(PlistTag::Dictionary))
-        }
-    }
-}
-
-impl fmt::Debug for HierarchyTracker {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if !f.alternate() {
-            f.debug_tuple("HierarchyTracker")
-                .field(&format_args!("0b{:064b}", self.0))
-                .finish()
-        } else {
-            f.debug_struct("HierarchyTracker")
-                .field("depth", &self.depth())
-                .field(
-                    "stack (RTL)",
-                    &format_args!(
-                        "{:0width$b}",
-                        self.0 >> HierarchyTracker::COUNT_BITS,
-                        width = (Self::MAX_DEPTH as usize)
-                            .saturating_sub(self.0.leading_zeros() as usize),
-                    ),
-                )
-                .finish()
-        }
-    }
 }
 
 #[cfg(test)]
