@@ -691,3 +691,56 @@ mod integration_tests {
         eprintln!("{doc:#?}");
     }
 }
+
+#[cfg(test)]
+mod hierarchy_tracker_tests {
+    use super::*;
+
+    #[test]
+    fn cant_pop_empty() {
+        let mut hierarchy = HierarchyTracker::default();
+        assert_eq!(
+            hierarchy.pop_array(),
+            Err(CollectionError::LonelyCloseArray)
+        );
+        assert_eq!(
+            hierarchy.pop_dictionary(),
+            Err(CollectionError::LonelyCloseDictionary)
+        );
+    }
+
+    // Array-in, array-out
+    #[test]
+    fn a_a() {
+        let mut hierarchy = HierarchyTracker::default();
+        hierarchy.push_array().expect("should push array");
+        hierarchy.pop_array().expect("should pop array");
+    }
+
+    // Dictionary-in, dictionary-out
+    #[test]
+    fn d_d() {
+        let mut hierarchy = HierarchyTracker::default();
+        hierarchy.push_dictionary().expect("should push dictionary");
+        hierarchy.pop_dictionary().expect("should pop dictionary");
+    }
+
+    // Extrapolate
+    #[test]
+    fn ad_da() {
+        let mut hierarchy = HierarchyTracker::default();
+        hierarchy.push_array().expect("should push array");
+        hierarchy.push_dictionary().expect("should push dictionary");
+        hierarchy.pop_dictionary().expect("should pop dictionary");
+        hierarchy.pop_array().expect("should pop array");
+    }
+
+    #[test]
+    fn da_ad() {
+        let mut hierarchy = HierarchyTracker::default();
+        hierarchy.push_dictionary().expect("should push dictionary");
+        hierarchy.push_array().expect("should push array");
+        hierarchy.pop_array().expect("should pop array");
+        hierarchy.pop_dictionary().expect("should pop dictionary");
+    }
+}
