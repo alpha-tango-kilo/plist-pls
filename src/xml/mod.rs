@@ -2,12 +2,12 @@ mod builders;
 mod errors;
 mod lexer;
 
-use logos::{Lexer, Logos, Span};
+pub use errors::{XmlErrorType, XmlParseSourceError};
+use logos::{Lexer, Logos};
 use regex_lite::Regex;
 
-pub use crate::xml::errors::{XmlErrorType, XmlParseSourceError};
 pub(crate) use crate::xml::{errors::XmlError, lexer::XmlToken};
-use crate::{BuildFromLexer, Value};
+use crate::{BuildFromLexer, TokenIterValueExt, Value};
 
 /// A complete XML plist document
 ///
@@ -115,47 +115,5 @@ impl<'a> XmlHeader<'a> {
             panic!("regex should have already been matched by lexer")
         };
         XmlHeader { version, encoding }
-    }
-}
-
-/// A trait to allow for the implementation of convenience methods on token
-/// iterator values
-trait TokenIterValueExt {
-    type Output;
-
-    /// Provide the source to the error, if present
-    fn map_err_to_src(
-        self,
-        source: &str,
-    ) -> Result<Self::Output, XmlParseSourceError>;
-}
-
-/// Useful on the return type of [`BuildFromLexer::build_from_tokens`]
-impl<T> TokenIterValueExt for Result<T, XmlError> {
-    type Output = T;
-
-    fn map_err_to_src(
-        self,
-        source: &str,
-    ) -> Result<Self::Output, XmlParseSourceError> {
-        self.map_err(|err| err.with_source(source))
-    }
-}
-
-/// Useful on the return type of `token_iter.next()`
-impl<'a> TokenIterValueExt for Option<(Result<XmlToken<'a>, XmlError>, Span)> {
-    type Output = (XmlToken<'a>, Span);
-
-    fn map_err_to_src(
-        self,
-        source: &str,
-    ) -> Result<Self::Output, XmlParseSourceError> {
-        let (value, span) = self.ok_or(XmlParseSourceError {
-            inner: XmlErrorType::UnexpectedEnd,
-            source,
-            span: None,
-        })?;
-        let value = value.map_err(|err| err.with_source(source))?;
-        Ok((value, span))
     }
 }

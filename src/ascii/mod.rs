@@ -2,10 +2,11 @@
 
 // https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/PropertyLists/OldStylePlists/OldStylePLists.html#//apple_ref/doc/uid/20001012-BBCBDBJE
 
+mod builders;
 mod errors;
 
 use errors::AsciiError;
-pub use errors::AsciiErrorType;
+pub use errors::{AsciiErrorType, AsciiParseSourceError};
 use logos::{Lexer, Logos};
 
 use crate::HierarchyTracker;

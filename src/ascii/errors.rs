@@ -69,6 +69,7 @@ pub enum AsciiErrorType {
     #[default]
     #[error("unlexable content")]
     Unlexable,
+
     // Lexer errors
     /// Unclosed quoted string
     #[error("unclosed quoted string")]
@@ -88,6 +89,20 @@ pub enum AsciiErrorType {
     /// See [`CollectionError`]
     #[error(transparent)]
     Collection(#[from] CollectionError),
+
+    // Higher-level parser errors (not detected by the lexer)
+    /// Missing key in a dictionary
+    #[error("needed key")]
+    MissingKey,
+    /// Wanted a [`Value`](crate::Value), got something else
+    #[error("expected value")]
+    ExpectedValue,
+    /// Unexpected EOF
+    #[error("input ended unexpectedly")]
+    UnexpectedEnd,
+    /// Unwanted extra content
+    #[error("unwanted extra content")]
+    ExpectedEnd,
 }
 
 impl AsciiErrorType {

@@ -692,6 +692,22 @@ mod integration_tests {
     }
 }
 
+/// A trait to allow for the implementation of convenience methods on token
+/// iterator values
+///
+/// There's a generic lifetime parameter to support Output and Error needing a
+/// lifetime (they will)
+trait TokenIterValueExt<'a> {
+    type Output;
+    type Error;
+
+    /// Provide the source to the error, if present
+    fn map_err_to_src(
+        self,
+        source: &'a str,
+    ) -> Result<Self::Output, Self::Error>;
+}
+
 #[cfg(test)]
 mod hierarchy_tracker_tests {
     use super::*;

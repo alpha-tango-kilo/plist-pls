@@ -1,6 +1,8 @@
+use logos::Span;
+
 use crate::{
-    xml::{XmlError, XmlErrorType, XmlToken},
-    Array, BuildFromLexer, Dictionary, TokenIter, Value,
+    xml::{XmlError, XmlErrorType, XmlParseSourceError, XmlToken},
+    Array, BuildFromLexer, Dictionary, TokenIter, TokenIterValueExt, Value,
 };
 
 impl<'a> BuildFromLexer<'a, XmlToken<'a>> for Value<'a> {
@@ -107,5 +109,39 @@ impl<'a> BuildFromLexer<'a, XmlToken<'a>> for Array<'a> {
                 },
             }
         }
+    }
+}
+
+/// Useful on the return type of [`BuildFromLexer::build_from_tokens`]
+impl<'a, T> TokenIterValueExt<'a> for Result<T, XmlError> {
+    type Error = XmlParseSourceError<'a>;
+    type Output = T;
+
+    fn map_err_to_src(
+        self,
+        source: &'a str,
+    ) -> Result<Self::Output, Self::Error> {
+        self.map_err(|err| err.with_source(source))
+    }
+}
+
+/// Useful on the return type of `token_iter.next()`
+impl<'a> TokenIterValueExt<'a>
+    for Option<(Result<XmlToken<'a>, XmlError>, Span)>
+{
+    type Error = XmlParseSourceError<'a>;
+    type Output = (XmlToken<'a>, Span);
+
+    fn map_err_to_src(
+        self,
+        source: &'a str,
+    ) -> Result<Self::Output, Self::Error> {
+        let (value, span) = self.ok_or(XmlParseSourceError {
+            inner: XmlErrorType::UnexpectedEnd,
+            source,
+            span: None,
+        })?;
+        let value = value.map_err(|err| err.with_source(source))?;
+        Ok((value, span))
     }
 }
