@@ -92,6 +92,10 @@ impl<'a> BuildFromLexer<'a, XmlToken<'a>> for Array<'a> {
                     token_iter.next();
                     return Ok(array);
                 },
+                Ok(_) => {
+                    let value = Value::build_from_tokens(token_iter)?;
+                    array.push(value);
+                },
                 Err(_) => {
                     // SAFETY: trusting that peek is correctly implemented -
                     // according to it there is a next value and it's an error
@@ -102,10 +106,6 @@ impl<'a> BuildFromLexer<'a, XmlToken<'a>> for Array<'a> {
                             .0
                             .unwrap_err_unchecked()
                     });
-                },
-                Ok(_) => {
-                    let value = Value::build_from_tokens(token_iter)?;
-                    array.push(value);
                 },
             }
         }

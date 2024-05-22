@@ -23,7 +23,7 @@ pub(crate) enum AsciiToken<'a> {
     #[token("}", pop_dictionary)]
     EndDictionary,
     #[token(",")]
-    ListSeparator,
+    ArrayEntrySeparator,
     #[token(";")]
     DictEntrySeparator,
     #[token("=")]
@@ -33,6 +33,7 @@ pub(crate) enum AsciiToken<'a> {
     #[token("<", gobble_data)]
     Data(&'a str),
     // Anything that's not whitespace or another token
+    // TODO: validate against ASCII-plists rules and/or just change the regex
     #[regex(r#"[^ ({)}=,;"<>\t\r\n\f]+"#)]
     Primitive(&'a str),
 }
