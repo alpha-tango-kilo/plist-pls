@@ -10,7 +10,6 @@ use logos::{Lexer, Logos};
 
 use crate::HierarchyTracker;
 
-// TODO: re-use hierarchy tracker for arrays & dictionaries
 #[derive(Logos, Copy, Clone, Debug, PartialEq)]
 #[logos(skip r"[ \t\r\n\f]+", extras = Extra, error = AsciiError)]
 pub(crate) enum AsciiToken<'a> {
@@ -143,18 +142,18 @@ push_pop_collection_impls! {
 #[cfg(test)]
 mod unit_tests {
     use super::*;
+    use crate::print_miette;
 
     fn should_lex(input: &str) -> Vec<AsciiToken> {
         let mut tokens = vec![];
         for token in AsciiToken::lexer(input) {
             match token {
                 Ok(token) => tokens.push(token),
-                Err(why) => {
+                Err(lex_error) => {
                     eprintln!("Partially lexed: {tokens:#?}");
-                    // TODO: use nice error messages once available
                     // Boilerplate to get nice miette errors in panic messages
-                    // let why = lex_error.with_source(input);
-                    // print_miette(&why);
+                    let why = lex_error.with_source(input);
+                    print_miette(&why);
                     panic!("failed to lex: {why:?}");
                 },
             }
