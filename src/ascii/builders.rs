@@ -75,23 +75,26 @@ impl<'a> BuildFromLexer<'a, AsciiToken<'a>> for Dictionary<'a> {
                 _ => return Err(AsciiErrorType::MissingKey.with_span(span)),
             };
 
-            let (token, _span) = token_iter
+            let (token, span) = token_iter
                 .next()
                 .ok_or(AsciiError::new(AsciiErrorType::UnexpectedEnd))?;
             if !matches!(token?, AsciiToken::KeyAssign) {
-                todo!("missing '=' between key and value");
+                return Err(AsciiErrorType::MissingKeyAssign.with_span(span));
             }
 
             let value = Value::build_from_tokens(token_iter)?;
             dict.insert(key, value);
 
-            let (token, _span) = token_iter
+            let (token, span) = token_iter
                 .next()
                 .ok_or(AsciiError::new(AsciiErrorType::UnexpectedEnd))?;
             match token? {
                 AsciiToken::DictEntrySeparator => {},
                 AsciiToken::EndDictionary => return Ok(dict),
-                _ => todo!("expected close dict or semicolon"),
+                _ => {
+                    return Err(AsciiErrorType::SeparatorOrCloseDictionary
+                        .with_span(span));
+                },
             }
         }
     }
@@ -133,13 +136,17 @@ impl<'a> BuildFromLexer<'a, AsciiToken<'a>> for Array<'a> {
                 },
             }
 
-            let (token, _span) = token_iter
+            let (token, span) = token_iter
                 .next()
                 .ok_or(AsciiError::new(AsciiErrorType::UnexpectedEnd))?;
             match token? {
                 AsciiToken::ArrayEntrySeparator => {},
                 AsciiToken::EndArray => return Ok(array),
-                _ => todo!("expected close array or comma"),
+                _ => {
+                    return Err(
+                        AsciiErrorType::SeparatorOrCloseArray.with_span(span)
+                    );
+                },
             }
         }
     }

@@ -88,9 +88,18 @@ pub enum AsciiErrorType {
     /// Missing key in a dictionary
     #[error("needed key")]
     MissingKey,
+    /// Missing the '=' between the key & value in a dictionary
+    #[error("missing '=' between key & value")]
+    MissingKeyAssign,
     /// Wanted a [`Value`](crate::Value), got something else
     #[error("expected value")]
     ExpectedValue,
+    /// Wanted ',' or ')', got something else
+    #[error("expected comma separator or end of array")]
+    /// Wanted ';' or '}', got something else
+    SeparatorOrCloseArray,
+    #[error("expected semicolon separator or end of dictionary")]
+    SeparatorOrCloseDictionary,
     /// Unexpected EOF
     #[error("input ended unexpectedly")]
     UnexpectedEnd,
