@@ -159,7 +159,9 @@ mod unit_tests {
         let input = "<0fbd777 1c2735ae>";
         let lexed = should_lex(input);
         println!("{lexed:?}");
-        assert_eq!(lexed, vec![AsciiToken::Data("0fbd777 1c2735ae")]);
+        assert_eq!(lexed, vec![AsciiToken::Data(
+            Data::new("0fbd777 1c2735ae", DataEncoding::Hexadecimal).unwrap()
+        )]);
     }
 
     #[test]

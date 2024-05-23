@@ -19,7 +19,10 @@ use time::{
 };
 
 pub use crate::dictionary::Dictionary;
-use crate::xml::{XmlErrorType, XmlParseSourceError, XmlToken};
+use crate::{
+    ascii::{AsciiErrorType, AsciiParseSourceError, AsciiToken},
+    xml::{XmlErrorType, XmlParseSourceError, XmlToken},
+};
 
 /// Contains [`Data`] and its associated types
 pub mod data;
@@ -60,7 +63,7 @@ pub enum Value<'a> {
 }
 
 impl<'a> Value<'a> {
-    /// Reads a `Value` from an XML string
+    /// Reads a `Value` from an XML plist string
     ///
     /// If you are parsing a full document, consider
     /// [`XmlDocument`](xml::XmlDocument)
@@ -75,6 +78,23 @@ impl<'a> Value<'a> {
             None => Ok(value),
             // ...wait, there's more?
             Some((_, span)) => Err(XmlErrorType::ExpectedEnd
+                .with_span(span.start..source.len())
+                .with_source(source)),
+        }
+    }
+
+    /// Reads a `Value` from an ASCII plist string
+    pub fn from_ascii_str(
+        source: &'a str,
+    ) -> Result<Self, AsciiParseSourceError<'a>> {
+        let mut token_iter = AsciiToken::lexer(source).spanned().peekable();
+        let value = Value::build_from_tokens(&mut token_iter)
+            .map_err(|err| err.with_source(source))?;
+        match token_iter.next() {
+            // Input exhausted, yay!
+            None => Ok(value),
+            // ...wait, there's more?
+            Some((_, span)) => Err(AsciiErrorType::ExpectedEnd
                 .with_span(span.start..source.len())
                 .with_source(source)),
         }
@@ -420,6 +440,22 @@ where
     ) -> Result<Self, Self::Error>;
 }
 
+/// A trait to allow for the implementation of convenience methods on token
+/// iterator values
+///
+/// There's a generic lifetime parameter to support Output and Error needing a
+/// lifetime (they will)
+trait TokenIterValueExt<'a> {
+    type Output;
+    type Error;
+
+    /// Provide the source to the error, if present
+    fn map_err_to_src(
+        self,
+        source: &'a str,
+    ) -> Result<Self::Output, Self::Error>;
+}
+
 /// An issue with opening/closing collections
 #[derive(Debug, Error, Copy, Clone, PartialEq, Eq)]
 pub enum CollectionError {
@@ -572,36 +608,43 @@ pub(crate) fn print_miette(err: &dyn miette::Diagnostic) {
 // (which I want for miette reports)
 #[cfg(test)]
 mod integration_tests {
-    use crate::{print_miette, xml::XmlDocument};
+    use crate::print_miette;
 
-    #[test]
-    fn whole_doc() {
-        let source = include_str!("../test_data/xml.plist");
-        let doc = match XmlDocument::from_str(source) {
-            Ok(doc) => doc,
-            Err(why) => {
-                print_miette(&why);
-                panic!("should load document");
-            },
-        };
-        eprintln!("{doc:#?}");
+    mod xml {
+        use super::*;
+        use crate::xml::XmlDocument;
+
+        #[test]
+        fn whole_doc() {
+            let source = include_str!("../test_data/xml.plist");
+            let doc = match XmlDocument::from_str(source) {
+                Ok(doc) => doc,
+                Err(why) => {
+                    print_miette(&why);
+                    panic!("should load document");
+                },
+            };
+            eprintln!("{doc:#?}");
+        }
     }
-}
 
-/// A trait to allow for the implementation of convenience methods on token
-/// iterator values
-///
-/// There's a generic lifetime parameter to support Output and Error needing a
-/// lifetime (they will)
-trait TokenIterValueExt<'a> {
-    type Output;
-    type Error;
+    mod ascii {
+        use super::*;
+        use crate::Value;
 
-    /// Provide the source to the error, if present
-    fn map_err_to_src(
-        self,
-        source: &'a str,
-    ) -> Result<Self::Output, Self::Error>;
+        #[test]
+        fn whole_doc() {
+            let source = include_str!("../test_data/NewFontG3.glyphs");
+            let value = match Value::from_ascii_str(source) {
+                Ok(value) => value,
+                Err(why) => {
+                    print_miette(&why);
+                    panic!("should load value");
+                },
+            };
+            eprintln!("{value:#?}");
+        }
+    }
 }
 
 #[cfg(test)]
