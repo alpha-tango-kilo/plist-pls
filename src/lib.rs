@@ -7,13 +7,11 @@
 #![doc = include_str!("../README.md")]
 
 use std::{
-    fmt, io, io::Read, iter::Peekable, num::IntErrorKind, str::FromStr,
-    time::SystemTime,
+    fmt, iter::Peekable, num::IntErrorKind, str::FromStr, time::SystemTime,
 };
 
-use base64::{prelude::BASE64_STANDARD, read::DecoderReader};
+pub use data::Data;
 use derive_more::{Display, IsVariant};
-use iter_read::IterRead;
 use logos::{Logos, SpannedIter};
 use thiserror::Error;
 use time::{
@@ -23,6 +21,8 @@ use time::{
 pub use crate::dictionary::Dictionary;
 use crate::xml::{XmlErrorType, XmlParseSourceError, XmlToken};
 
+/// Contains [`Data`] and its associated types
+pub mod data;
 /// Contains [`Dictionary`] and its associated types
 pub mod dictionary;
 
@@ -367,110 +367,6 @@ impl FromStr for Uid {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         s.parse::<u64>().map(Into::into).map_err(ParseUidError)
-    }
-}
-
-/// A plist data entry - base64-encoded arbitrary bytes
-///
-/// The data is validated, **not decoded** during parsing - the base64 encoding
-/// is expected to be padded. See [`Data::decode`] to access the decoded data
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct Data<'a> {
-    encoded: &'a str,
-}
-
-/// The error encountered when parsing [`Data`]
-#[derive(Debug, Error, Copy, Clone, PartialEq, Eq)]
-pub enum ValidateDataError {
-    /// The data contains an illegal character
-    #[error("data contains an illegal character")]
-    IllegalCharacter(char),
-    /// The data is corrupt or missing padding
-    #[error("data is corrupt or missing padding")]
-    Corrupt,
-    /// An '=' found midway through string
-    #[error("'=' found midway through string")]
-    PaddingNotAtEnd,
-}
-
-/// The error encountered when decoding [`Data`]
-#[derive(Debug, Error)]
-#[error(transparent)]
-pub struct DecodeDataError(io::Error);
-
-impl Data<'_> {
-    /// Checks the inner encoded base64 string is valid & padded
-    ///
-    /// This method is called during parsing, so you probably don't need to call
-    /// it yourself
-    pub fn validate(&self, padded: bool) -> Result<(), ValidateDataError> {
-        let mut padding_started = false;
-        let mut padding_char_count = 0usize;
-        let mut data_char_count = 0usize;
-        for char in self.encoded.chars() {
-            if char.is_ascii_whitespace() {
-                continue;
-            }
-            if !padding_started {
-                match char {
-                    'A'..='Z' | 'a'..='z' | '0'..='9' | '+' | '/' => {
-                        data_char_count += 1
-                    },
-                    '=' if padded => {
-                        padding_started = true;
-                        padding_char_count = 1;
-                    },
-                    illegal => {
-                        return Err(ValidateDataError::IllegalCharacter(
-                            illegal,
-                        ))
-                    },
-                }
-            } else if char != '=' {
-                return Err(ValidateDataError::PaddingNotAtEnd);
-            } else {
-                padding_char_count += 1;
-            }
-        }
-
-        if padded {
-            // Each base64 character represents 6 bits, and we expect a whole
-            // number of bytes (with padded base64)
-            // The Python base64 impl doesn't care if there's more padding than
-            // needed, so we won't either
-            let needed_padding = (data_char_count * 6) % 8;
-            if needed_padding > padding_char_count {
-                return Err(ValidateDataError::Corrupt);
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Decodes the internal data, returning an allocated buffer
-    pub fn decode(&self) -> Result<Vec<u8>, DecodeDataError> {
-        let reader = IterRead::new(
-            self.encoded
-                .bytes()
-                .filter(|byte| !byte.is_ascii_whitespace()),
-        );
-        let mut buf = Vec::new();
-        let mut decoder = DecoderReader::new(reader, &BASE64_STANDARD);
-        decoder.read_to_end(&mut buf).map_err(DecodeDataError)?;
-        Ok(buf)
-    }
-}
-
-impl<'a> TryFrom<&'a str> for Data<'a> {
-    type Error = ValidateDataError;
-
-    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
-        let me = Self {
-            encoded: value.trim(),
-        };
-        // Python's impl for plists requires padding
-        me.validate(true)?;
-        Ok(me)
     }
 }
 

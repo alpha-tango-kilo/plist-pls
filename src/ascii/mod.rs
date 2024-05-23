@@ -66,28 +66,14 @@ fn gobble_quoted_string<'a>(
     Ok(&rest[..close_quote])
 }
 
-// Validates the data string's characters & length
 fn gobble_data<'a>(
     lexer: &mut Lexer<'a, AsciiToken<'a>>,
 ) -> Result<&'a str, AsciiError> {
     let rest = lexer.remainder();
-    let mut end_index = None;
-    let mut data_len = 0usize;
-    for (index, char) in rest.chars().enumerate() {
-        if char == '>' {
-            end_index = Some(index);
-            break;
-        } else if char.is_ascii_whitespace() || char.is_ascii_hexdigit() {
-            data_len += 1;
-        } else {
-            // Plus one to get inside the '<', and then use `index` for
-            // relative position
-            let span_start = lexer.span().start + 1 + index;
-            let span_end = span_start + 1;
-            return Err(AsciiErrorType::InvalidDataCharacter(char)
-                .with_span(span_start..span_end));
-        }
-    }
+    let end_index = rest
+        .chars()
+        .enumerate()
+        .find_map(|(index, char)| (char == '>').then_some(index));
     let Some(end_index) = end_index else {
         let start_span = lexer.span().start;
         let end_span = start_span + lexer.remainder().len();
@@ -95,14 +81,6 @@ fn gobble_data<'a>(
             AsciiErrorType::UnclosedData.with_span(start_span..end_span)
         );
     };
-    if data_len % 2 != 0 {
-        let start_span = lexer.span().start;
-        // Plus one each time for the start/end '<' '>'
-        let end_span = start_span + 1 + data_len + 1;
-        return Err(
-            AsciiErrorType::InvalidDataLen.with_span(start_span..end_span)
-        );
-    }
     // Plus one to get past the '>'
     lexer.bump(end_index + 1);
     Ok(&rest[..end_index])

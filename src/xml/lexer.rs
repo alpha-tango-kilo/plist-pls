@@ -4,6 +4,7 @@ use logos::{Lexer, Logos};
 use regex_lite::Regex;
 
 use crate::{
+    data::DataEncoding,
     xml::{XmlError, XmlErrorType, XmlHeader},
     Data, Date, HierarchyTracker, Integer, Uid,
 };
@@ -200,7 +201,7 @@ fn gobble_data<'a>(
     lexer.bump(close_tag_start + TAG.len());
     let content = &rest[..close_tag_start];
     // TODO: keep error
-    content.try_into().map_err(|_| {
+    Data::new(content, DataEncoding::Base64).map_err(|_| {
         XmlErrorType::CouldNotParse(PlistTag::Data).with_span(lexer.span())
     })
 }
