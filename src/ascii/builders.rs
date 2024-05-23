@@ -25,9 +25,7 @@ impl<'a> BuildFromLexer<'a, AsciiToken<'a>> for Value<'a> {
                 Dictionary::build_from_tokens(token_iter).map(Into::into)
             },
             AsciiToken::QuotedString(value) => Ok(value.into()),
-            AsciiToken::Data(_) => {
-                todo!("ASCII data is differently encoded to XML data");
-            },
+            AsciiToken::Data(value) => Ok(value.into()),
             AsciiToken::Primitive(_something) => {
                 todo!("try parsing this as anything under the sun");
             },

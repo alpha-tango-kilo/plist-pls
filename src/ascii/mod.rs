@@ -9,7 +9,7 @@ use errors::AsciiError;
 pub use errors::{AsciiErrorType, AsciiParseSourceError};
 use logos::{Lexer, Logos};
 
-use crate::HierarchyTracker;
+use crate::{data::DataEncoding, Data, HierarchyTracker};
 
 #[derive(Logos, Copy, Clone, Debug, PartialEq)]
 #[logos(skip r"[ \t\r\n\f]+", extras = Extra, error = AsciiError)]
@@ -31,7 +31,7 @@ pub(crate) enum AsciiToken<'a> {
     #[token("\"", gobble_quoted_string)]
     QuotedString(&'a str),
     #[token("<", gobble_data)]
-    Data(&'a str),
+    Data(Data<'a>),
     // Anything that's not whitespace or another token
     // TODO: validate against ASCII-plists rules and/or just change the regex
     #[regex(r#"[^ ({)}=,;"<>\t\r\n\f]+"#)]
@@ -68,8 +68,9 @@ fn gobble_quoted_string<'a>(
 
 fn gobble_data<'a>(
     lexer: &mut Lexer<'a, AsciiToken<'a>>,
-) -> Result<&'a str, AsciiError> {
+) -> Result<Data<'a>, AsciiError> {
     let rest = lexer.remainder();
+    // End index is relative to remainder, not entire input
     let end_index = rest
         .chars()
         .enumerate()
@@ -83,7 +84,11 @@ fn gobble_data<'a>(
     };
     // Plus one to get past the '>'
     lexer.bump(end_index + 1);
-    Ok(&rest[..end_index])
+    Data::new(&rest[..end_index], DataEncoding::Hexadecimal).map_err(|err| {
+        let start_span = lexer.span().start;
+        let end_span = start_span + end_index + 1;
+        AsciiErrorType::InvalidData(err).with_span(start_span..end_span)
+    })
 }
 
 macro_rules! push_pop_collection_impls {

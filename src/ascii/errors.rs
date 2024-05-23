@@ -2,7 +2,7 @@ use logos::Span;
 use miette::{Diagnostic, SourceSpan};
 use thiserror::Error;
 
-use crate::CollectionError;
+use crate::{data::ValidateDataError, CollectionError};
 
 /// The error encountered when parsing a [`Value`](crate::Value), annotated with
 /// the location in the original source
@@ -74,15 +74,9 @@ pub enum AsciiErrorType {
     /// Unclosed quoted string
     #[error("unclosed quoted string")]
     UnclosedString,
-    /// Invalid character in data (not hexadecimal or whitespace)
-    #[error(
-        "invalid character in data {0:?} (should be hexadecimal/whitespace)"
-    )]
-    InvalidDataCharacter(char),
-    /// Invalid data length (must have an even number of hexadecimal
-    /// characters)
-    #[error("data is undecodable")]
-    InvalidDataLen,
+    /// Invalid data (see [`ValidateDataError`])
+    #[error(transparent)]
+    InvalidData(#[from] ValidateDataError),
     /// Unclosed data
     #[error("unclosed data")]
     UnclosedData,
