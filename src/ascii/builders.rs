@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use logos::Span;
 
 use crate::{
@@ -5,8 +7,20 @@ use crate::{
         errors::{AsciiError, AsciiParseSourceError},
         AsciiErrorType, AsciiToken,
     },
-    Array, BuildFromLexer, Dictionary, TokenIter, TokenIterValueExt, Value,
+    Array, BuildFromLexer, Dictionary, Integer, TokenIter, TokenIterValueExt,
+    Value,
 };
+
+fn parse_primitive(primitive: &str) -> Value {
+    // Should this be Float or Real?
+    if let Ok(float) = primitive.parse::<f64>() {
+        return Value::Float(float);
+    }
+    if let Ok(integer) = Integer::from_str(primitive) {
+        return integer.into();
+    }
+    return Value::String(primitive);
+}
 
 impl<'a> BuildFromLexer<'a, AsciiToken<'a>> for Value<'a> {
     type Error = AsciiError;
@@ -26,9 +40,7 @@ impl<'a> BuildFromLexer<'a, AsciiToken<'a>> for Value<'a> {
             },
             AsciiToken::QuotedString(value) => Ok(value.into()),
             AsciiToken::Data(value) => Ok(value.into()),
-            AsciiToken::Primitive(_something) => {
-                todo!("try parsing this as anything under the sun");
-            },
+            AsciiToken::Primitive(something) => Ok(parse_primitive(something)),
             // Uuuh actually no
             AsciiToken::EndArray
             | AsciiToken::EndDictionary
