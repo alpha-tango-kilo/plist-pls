@@ -273,12 +273,6 @@ mod unit_tests {
         let mut tokens = vec![];
         for token in XmlToken::lexer(input) {
             match token {
-                Ok(token @ XmlToken::Data(data)) => {
-                    if let Err(why) = data.decode() {
-                        panic!("couldn't decode {data:?}: {why}");
-                    }
-                    tokens.push(token);
-                },
                 Ok(token) => tokens.push(token),
                 Err(lex_error) => {
                     eprintln!("Partially lexed: {tokens:#?}");
@@ -347,7 +341,11 @@ mod unit_tests {
             XmlToken::Real(1.6),
             XmlToken::Key("Data"),
             XmlToken::Data(
-                "\n\t\tAAAAvgAAAA\n\t\tMAAAAeAAAA\n\t".try_into().unwrap(),
+                Data::new(
+                    "\n\t\tAAAAvgAAAA\n\t\tMAAAAeAAAA\n\t",
+                    DataEncoding::Base64
+                )
+                .unwrap(),
             ),
             XmlToken::Key("Birthdate"),
             XmlToken::Date("1981-05-16T11:32:06Z".parse().unwrap()),

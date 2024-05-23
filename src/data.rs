@@ -1,7 +1,8 @@
-use std::{io, io::Read};
+use std::io::Read;
 
 use base64::{prelude::BASE64_STANDARD, read::DecoderReader};
 use iter_read::IterRead;
+use itertools::Itertools;
 use thiserror::Error;
 
 /// A plist data entry (base64 or hexadecimal)
@@ -36,11 +37,6 @@ pub enum ValidateDataError {
     #[error("'=' found midway through string")]
     PaddingNotAtEnd,
 }
-
-/// The error encountered when decoding [`Data`]
-#[derive(Debug, Error)]
-#[error(transparent)]
-pub struct DecodeDataError(io::Error);
 
 impl<'a> Data<'a> {
     /// Create a new `Data` with an encoded string slice
@@ -119,9 +115,8 @@ impl<'a> Data<'a> {
         Ok(())
     }
 
-    // TODO: this shouldn't fail as data is always validated, so unwrap
     /// Decodes the internal data, returning an allocated buffer
-    pub fn decode(&self) -> Result<Vec<u8>, DecodeDataError> {
+    pub fn decode(&self) -> Vec<u8> {
         match self.encoding {
             DataEncoding::Base64 => {
                 let reader = IterRead::new(
@@ -131,12 +126,44 @@ impl<'a> Data<'a> {
                 );
                 let mut buf = Vec::new();
                 let mut decoder = DecoderReader::new(reader, &BASE64_STANDARD);
-                decoder.read_to_end(&mut buf).map_err(DecodeDataError)?;
-                Ok(buf)
+                decoder
+                    .read_to_end(&mut buf)
+                    .expect("base64 failed to decode despite being validated");
+                buf
             },
             DataEncoding::Hexadecimal => {
-                todo!("decoding hex");
+                let parse_hex_char = |hex_char| {
+                    let val = match hex_char {
+                        '0'..='9' => hex_char as u32 - '0' as u32,
+                        'a'..='f' => hex_char as u32 - 'a' as u32 + 10,
+                        'A'..='F' => hex_char as u32 - 'A' as u32 + 10,
+                        _ => unreachable!("illegal hex char"),
+                    };
+                    val as u8
+                };
+                self.inner
+                    .chars()
+                    .filter(|c| c.is_ascii_hexdigit())
+                    .tuples::<(_, _)>()
+                    .map(|(upper, lower)| {
+                        (parse_hex_char(upper) << 4) + parse_hex_char(lower)
+                    })
+                    .collect()
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod unit_tests {
+    use super::*;
+
+    #[test]
+    fn decode_hex() {
+        let data = Data::new("1234 5678 9aBc DEf0", DataEncoding::Hexadecimal)
+            .unwrap();
+        assert_eq!(data.decode(), vec![
+            0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0,
+        ]);
     }
 }
