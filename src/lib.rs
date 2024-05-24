@@ -57,6 +57,9 @@ pub enum Value<'a> {
     /// A real
     Real(f64),
     /// A string
+    ///
+    /// Escapes will not have been interpreted, things like `\n` or
+    /// `\U0001F4A9` will show within the string, instead of a newline or 💩
     String(&'a str),
     /// A unique identifer
     Uid(Uid),

@@ -96,8 +96,8 @@ pub enum AsciiErrorType {
     ExpectedValue,
     /// Wanted ',' or ')', got something else
     #[error("expected comma separator or end of array")]
-    /// Wanted ';' or '}', got something else
     SeparatorOrCloseArray,
+    /// Wanted ';' or '}', got something else
     #[error("expected semicolon separator or end of dictionary")]
     SeparatorOrCloseDictionary,
     /// Unexpected EOF

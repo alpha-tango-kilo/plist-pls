@@ -1,5 +1,3 @@
-#![allow(missing_docs)]
-
 // References:
 // https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/PropertyLists/OldStylePlists/OldStylePLists.html#//apple_ref/doc/uid/20001012-BBCBDBJE
 // https://github.com/opensource-apple/CF/blob/master/CFOldStylePList.c
@@ -183,10 +181,18 @@ mod unit_tests {
         println!("{lexed:?}");
         assert_eq!(lexed, vec![AsciiToken::QuotedString(
             &input[1..input.len() - 1]
-        )],)
+        )]);
     }
 
-    // TODO: test escaped unicode literals in quoted strings
+    #[test]
+    fn unicode_escapes() {
+        let input = r#""\UD83D\UDCA9""#;
+        let lexed = should_lex(input);
+        println!("{lexed:?}");
+        assert_eq!(lexed, vec![AsciiToken::QuotedString(
+            &input[1..input.len() - 1]
+        )]);
+    }
 
     #[test]
     fn new_font_glyphs3() {
