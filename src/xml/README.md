@@ -1,6 +1,8 @@
 # XML lexer & parser
 
-`mod`: the lexer and its callbacks; unit tests
+`mod`: XML-only data types
+
+`lexer`: the lexer and its helpers
 
 `builders`: implementations of `BuildFromLexer` for `Value`, `Dictionary`, and `Array`
 
