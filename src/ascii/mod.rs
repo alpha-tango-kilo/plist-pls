@@ -36,6 +36,9 @@ pub(crate) enum AsciiToken<'a> {
     QuotedString(&'a str),
     #[token("<", gobble_data)]
     Data(Data<'a>),
+    #[token("//", gobble_single_comment)]
+    #[token("/*", gobble_multiline_comment)]
+    Comment(&'a str),
     // Anything that's not whitespace or another token
     #[regex(r#"[a-zA-Z\.\-\d]+"#)]
     Primitive(&'a str),
@@ -82,14 +85,12 @@ fn gobble_data<'a>(
     let end_index = rest
         .chars()
         .enumerate()
-        .find_map(|(index, char)| (char == '>').then_some(index));
-    let Some(end_index) = end_index else {
-        let start_span = lexer.span().start;
-        let end_span = start_span + lexer.remainder().len();
-        return Err(
+        .find_map(|(index, char)| (char == '>').then_some(index))
+        .ok_or_else(|| {
+            let start_span = lexer.span().start;
+            let end_span = start_span + lexer.remainder().len();
             AsciiErrorType::UnclosedData.with_span(start_span..end_span)
-        );
-    };
+        })?;
     // Plus one to get past the '>'
     lexer.bump(end_index + 1);
     Data::new(&rest[..end_index], DataEncoding::Hexadecimal).map_err(|err| {
@@ -97,6 +98,51 @@ fn gobble_data<'a>(
         let end_span = start_span + end_index + 1;
         AsciiErrorType::InvalidData(err).with_span(start_span..end_span)
     })
+}
+
+fn gobble_single_comment<'a>(lexer: &mut Lexer<'a, AsciiToken<'a>>) -> &'a str {
+    let rest = lexer.remainder();
+    let end_index = rest
+        .char_indices()
+        .find_map(|(index, char)| (char == '\n').then_some(index));
+    match end_index {
+        Some(end_index) => {
+            lexer.bump(end_index + 1);
+            rest[..end_index].trim()
+        },
+        // Special case, EOF, but this is fine
+        None => {
+            lexer.bump(rest.len());
+            rest.trim()
+        },
+    }
+}
+
+// Note: multiline comments will not be dedented
+fn gobble_multiline_comment<'a>(
+    lexer: &mut Lexer<'a, AsciiToken<'a>>,
+) -> Result<&'a str, AsciiError> {
+    let rest = lexer.remainder();
+    let close_comment = rest
+        .chars()
+        .tuple_windows()
+        .enumerate()
+        // index is for char_one, add 2 to get to the '*' of the comment close
+        .find_map(|(index, (char_one, char_two, char_three, char_four))| {
+            match (char_one, char_two, char_three, char_four) {
+                ('\\', '\\', '*', '/') => Some(index + 2),
+                (   _, '\\', '*', '/') => None,
+                (   _,    _, '*', '/') => Some(index + 2),
+                _ => None,
+            }
+        })
+        .ok_or_else(|| {
+            let start_span = lexer.span().start;
+            let end_span = start_span + lexer.remainder().len();
+            AsciiErrorType::UnclosedMultilineComment.with_span(start_span..end_span)
+        })?;
+    lexer.bump(close_comment + "*/".len());
+    Ok(rest[..close_comment].trim())
 }
 
 macro_rules! push_pop_collection_impls {
@@ -190,6 +236,33 @@ mod unit_tests {
         println!("{lexed:?}");
         assert_eq!(lexed, vec![AsciiToken::QuotedString(
             &input[1..input.len() - 1]
+        )]);
+    }
+
+    #[test]
+    fn single_comment() {
+        let input = "// Boring comment \nprimitive";
+        let lexed = should_lex(input);
+        println!("{lexed:?}");
+        assert_eq!(lexed, vec![
+            AsciiToken::Comment("Boring comment"),
+            AsciiToken::Primitive("primitive")
+        ]);
+
+        let input = "//Boring comment at EOF   ";
+        let lexed = should_lex(input);
+        println!("{lexed:?}");
+        assert_eq!(lexed, vec![AsciiToken::Comment("Boring comment at EOF")]);
+    }
+
+    #[test]
+    fn multiline_comment() {
+        let input =
+            "/* Boring comment,\nbut this time it's on multiple lines, omg */";
+        let lexed = should_lex(input);
+        println!("{lexed:?}");
+        assert_eq!(lexed, vec![AsciiToken::Comment(
+            "Boring comment,\nbut this time it's on multiple lines, omg"
         )]);
     }
 

@@ -41,6 +41,7 @@ impl<'a> BuildFromLexer<'a, AsciiToken<'a>> for Value<'a> {
             AsciiToken::QuotedString(value) => Ok(value.into()),
             AsciiToken::Data(value) => Ok(value.into()),
             AsciiToken::Primitive(something) => Ok(parse_primitive(something)),
+            AsciiToken::Comment(_) => todo!("skip/ignore"),
             // Uuuh actually no
             AsciiToken::EndArray
             | AsciiToken::EndDictionary

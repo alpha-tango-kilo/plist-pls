@@ -74,6 +74,9 @@ pub enum AsciiErrorType {
     /// Unclosed quoted string
     #[error("unclosed quoted string")]
     UnclosedString,
+    /// Unclosed multiline comment
+    #[error("unclosed multiline comment")]
+    UnclosedMultilineComment,
     /// Invalid data (see [`ValidateDataError`])
     #[error(transparent)]
     InvalidData(#[from] ValidateDataError),
