@@ -37,8 +37,7 @@ pub(crate) enum AsciiToken<'a> {
     #[token("<", gobble_data)]
     Data(Data<'a>),
     // Anything that's not whitespace or another token
-    // TODO: validate against ASCII-plists rules and/or just change the regex
-    #[regex(r#"[^ ({)}=,;"<>\t\r\n\f]+"#)]
+    #[regex(r#"[a-zA-Z\.\-\d]+"#)]
     Primitive(&'a str),
 }
 
