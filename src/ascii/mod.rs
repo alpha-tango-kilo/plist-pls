@@ -1,15 +1,21 @@
 #![allow(missing_docs)]
 
+// References:
 // https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/PropertyLists/OldStylePlists/OldStylePLists.html#//apple_ref/doc/uid/20001012-BBCBDBJE
+// https://github.com/opensource-apple/CF/blob/master/CFOldStylePList.c
+// https://github.com/fonttools/openstep-plist
 
 mod builders;
 mod errors;
 
 use errors::AsciiError;
 pub use errors::{AsciiErrorType, AsciiParseSourceError};
+use itertools::Itertools;
 use logos::{Lexer, Logos};
 
 use crate::{data::DataEncoding, Data, HierarchyTracker};
+
+// TODO: support comments? both // and /* ... */ are allowed
 
 #[derive(Logos, Copy, Clone, Debug, PartialEq)]
 #[logos(skip r"[ \t\r\n\f]+", extras = Extra, error = AsciiError)]
@@ -43,19 +49,24 @@ pub(crate) struct Extra {
     hierarchy: HierarchyTracker,
 }
 
+// Reference impl: https://github.com/fonttools/openstep-plist/blob/4f8a9533b2a5553f416997ab6482d0afe96b1d90/src/openstep_plist/parser.pyx#L342-L359
 fn gobble_quoted_string<'a>(
     lexer: &mut Lexer<'a, AsciiToken<'a>>,
 ) -> Result<&'a str, AsciiError> {
     let rest = lexer.remainder();
     // close_quote is relative to the remainder
-    // TODO: consider char windows? https://stackoverflow.com/a/51261570
-    // TODO: what if the backslash is escaped? do you even need to do that in
-    //       ASCII plist?
     let close_quote = rest
         .chars()
-        .zip(rest.char_indices().skip(1))
-        .find_map(|(char_one, (index, char_two))| {
-            (char_two == '"' && char_one != '\\').then_some(index)
+        .tuple_windows()
+        .enumerate()
+        // index is for char_one, hence the need to add 2
+        .find_map(|(index, (char_one, char_two, char_three))| {
+            match (char_one, char_two, char_three) {
+                ('\\', '\\', '"') => Some(index + 2),
+                (   _, '\\', '"') => None,
+                (   _,    _, '"') => Some(index + 2),
+                _ => None,
+            }
         })
         .ok_or_else(|| {
             let start_span = lexer.span().start;
@@ -156,13 +167,26 @@ mod unit_tests {
 
     #[test]
     fn data() {
-        let input = "<0fbd777 1c2735ae>";
+        let input = "<0fbed777 1c2735ae>";
         let lexed = should_lex(input);
         println!("{lexed:?}");
         assert_eq!(lexed, vec![AsciiToken::Data(
-            Data::new("0fbd777 1c2735ae", DataEncoding::Hexadecimal).unwrap()
+            Data::new(&input[1..input.len() - 1], DataEncoding::Hexadecimal)
+                .unwrap()
         )]);
     }
+
+    #[test]
+    fn string_escapes() {
+        let input = r#""Mum says I'm being \"sarcastic\", little does she know I just love backslashes \\""#;
+        let lexed = should_lex(input);
+        println!("{lexed:?}");
+        assert_eq!(lexed, vec![AsciiToken::QuotedString(
+            &input[1..input.len() - 1]
+        )],)
+    }
+
+    // TODO: test escaped unicode literals in quoted strings
 
     #[test]
     fn new_font_glyphs3() {

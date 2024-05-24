@@ -97,6 +97,13 @@ impl<'a> Data<'a> {
                     return Err(ValidateDataError::Corrupt);
                 }
             },
+            /*
+            So, Apple's own documentation site gives an example data with an
+            odd number of hex characters, and provides no explanation on how
+            you should decode this. Their own open source implementation
+            doesn't accept odd-length hex encodings, so I won't either
+            https://github.com/opensource-apple/CF/blob/3cc41a76b1491f50813e28a4ec09954ffa359e6f/CFOldStylePList.c#L444-L451
+             */
             DataEncoding::Hexadecimal => {
                 let mut data_len = 0usize;
                 for char in encoded.chars() {
@@ -144,7 +151,7 @@ impl<'a> Data<'a> {
                 self.inner
                     .chars()
                     .filter(|c| c.is_ascii_hexdigit())
-                    .tuples::<(_, _)>()
+                    .tuples()
                     .map(|(upper, lower)| {
                         (parse_hex_char(upper) << 4) + parse_hex_char(lower)
                     })

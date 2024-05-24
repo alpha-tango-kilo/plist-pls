@@ -9,6 +9,8 @@ use crate::{
     Data, Date, HierarchyTracker, Integer, Uid,
 };
 
+// TODO: support comments? <!-- *blah* -->
+
 #[derive(Logos, Copy, Clone, Debug, PartialEq)]
 #[logos(skip r"[ \t\r\n\f]+", extras = Extra, error = XmlError)]
 pub(crate) enum XmlToken<'a> {
