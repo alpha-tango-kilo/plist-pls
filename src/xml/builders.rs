@@ -34,6 +34,7 @@ impl<'a> BuildFromLexer<'a, XmlToken<'a>> for Value<'a> {
             XmlToken::Real(value) => Ok(Value::Real(value)),
             XmlToken::String(value) => Ok(value.into()),
             XmlToken::Uid(value) => Ok(value.into()),
+            XmlToken::Comment(_) => todo!("skip/ignore"),
             // "Why is this here you weirdo?"
             XmlToken::XmlHeader(_)
             | XmlToken::DocTypeHeader

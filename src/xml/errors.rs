@@ -89,7 +89,7 @@ pub enum XmlErrorType {
 
     // Only used by gobblers
     /// Unclosed tag
-    #[error("unclosed <{0}>")]
+    #[error("unclosed {0}")]
     Unclosed(PlistTag),
     /// Unparseable tag contents, e.g. `<integer>elephant</integer>`
     #[error("could not parse as {0}")]

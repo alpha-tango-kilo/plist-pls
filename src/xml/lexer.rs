@@ -9,8 +9,6 @@ use crate::{
     Data, Date, HierarchyTracker, Integer, Uid,
 };
 
-// TODO: support comments? <!-- *blah* -->
-
 #[derive(Logos, Copy, Clone, Debug, PartialEq)]
 #[logos(skip r"[ \t\r\n\f]+", extras = Extra, error = XmlError)]
 pub(crate) enum XmlToken<'a> {
@@ -71,6 +69,8 @@ pub(crate) enum XmlToken<'a> {
     #[token("<uid>", gobble_uid)]
     #[token("<uid/>", weird_empty_uid)]
     Uid(Uid),
+    #[token("<!--", gobble_comment)]
+    Comment(&'a str),
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -85,6 +85,7 @@ pub enum PlistTag {
     Float,
     Uid,
     Key,
+    Comment,
 }
 
 impl fmt::Display for PlistTag {
@@ -100,6 +101,7 @@ impl fmt::Display for PlistTag {
             PlistTag::Float => f.write_str("float"),
             PlistTag::Uid => f.write_str("uid"),
             PlistTag::Key => f.write_str("key"),
+            PlistTag::Comment => f.write_str("comment"),
         }
     }
 }
@@ -206,6 +208,21 @@ fn gobble_data<'a>(
     Data::new(content, DataEncoding::Base64).map_err(|_| {
         XmlErrorType::CouldNotParse(PlistTag::Data).with_span(lexer.span())
     })
+}
+
+fn gobble_comment<'a>(
+    lexer: &mut Lexer<'a, XmlToken<'a>>,
+) -> Result<&'a str, XmlError> {
+    const CLOSE: &str = "-->";
+    let rest = lexer.remainder();
+    let close_start = rest.find(CLOSE).ok_or_else(|| {
+        let span_start = lexer.span().end + 1;
+        let span_end = span_start + rest.len();
+        XmlErrorType::Unclosed(PlistTag::Comment)
+            .with_span(span_start..span_end)
+    })?;
+    lexer.bump(close_start + CLOSE.len());
+    Ok(&rest[..close_start])
 }
 
 macro_rules! weird_empty_impls {
