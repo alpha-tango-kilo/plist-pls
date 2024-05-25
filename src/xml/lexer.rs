@@ -27,8 +27,6 @@ pub(crate) enum XmlToken<'a> {
     PlistHeader(&'a str),
     #[token("</plist>")]
     EndPlist,
-    #[token("<plist/>")]
-    EmptyPlist,
     // Collections
     #[token("<array>", push_array)]
     StartArray,

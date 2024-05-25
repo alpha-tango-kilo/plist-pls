@@ -40,7 +40,6 @@ impl<'a> BuildFromLexer<'a, XmlToken<'a>> for Value<'a> {
             | XmlToken::DocTypeHeader
             | XmlToken::PlistHeader(_)
             | XmlToken::EndPlist
-            | XmlToken::EmptyPlist
             | XmlToken::Key(_)
             | XmlToken::EndArray
             | XmlToken::EndDictionary => {
