@@ -37,7 +37,6 @@ impl<'a> XmlDocument<'a> {
     ///
     /// (Note: sorry this isn't a [`FromStr`](std::str::FromStr) implementation,
     /// but that trait doesn't support lifetimes)
-    // TODO: TryFrom impl
     #[allow(clippy::should_implement_trait)]
     pub fn from_str(source: &'a str) -> Result<Self, XmlParseSourceError<'a>> {
         let mut token_iter = XmlToken::lexer(source).spanned().peekable();
@@ -82,6 +81,15 @@ impl<'a> XmlDocument<'a> {
             plist_version,
             content,
         })
+    }
+}
+
+impl<'a> TryFrom<&'a str> for XmlDocument<'a> {
+    type Error = XmlParseSourceError<'a>;
+
+    #[inline]
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        XmlDocument::from_str(value)
     }
 }
 
