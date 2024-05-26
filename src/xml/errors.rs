@@ -1,8 +1,13 @@
+use std::num::ParseFloatError;
+
 use logos::Span;
 use miette::{Diagnostic, SourceSpan};
 use thiserror::Error;
 
-use crate::{xml::lexer::PlistTag, CollectionError};
+use crate::{
+    data::ValidateDataError, xml::lexer::PlistTag, CollectionError,
+    ParseDateError, ParseIntegerError, ParseUidError,
+};
 
 /// The error encountered when parsing a [`Value`](crate::Value) or
 /// [`XmlDocument`](super::XmlDocument), annotated with the location in the
@@ -38,8 +43,8 @@ pub struct XmlParseSourceError<'a> {
 impl XmlParseSourceError<'_> {
     /// Access the inner error without the source code and span bundled with it
     #[must_use]
-    pub const fn kind(&self) -> XmlErrorType {
-        self.inner
+    pub const fn kind(&self) -> &XmlErrorType {
+        &self.inner
     }
 }
 
@@ -68,7 +73,7 @@ impl XmlError {
 
 /// The underlying error encountered when parsing a [`Value`](crate::Value) or
 /// [`XmlDocument`](super::XmlDocument)
-#[derive(Debug, Error, Copy, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Error, Clone, Default, PartialEq, Eq)]
 pub enum XmlErrorType {
     /// Unlexable content - something is so wrong I don't even know what I'm
     /// looking at
@@ -93,8 +98,8 @@ pub enum XmlErrorType {
     #[error("unclosed {0}")]
     Unclosed(PlistTag),
     /// Unparseable tag contents, e.g. `<integer>elephant</integer>`
-    #[error("could not parse as {0}")]
-    CouldNotParse(PlistTag),
+    #[error("could not parse as {0}: {1}")]
+    CouldNotParse(PlistTag, ParseError),
 
     // Only used by collections
     /// See [`CollectionError`]
@@ -125,4 +130,14 @@ impl XmlErrorType {
     pub(crate) const fn with_span(self, span: Span) -> XmlError {
         XmlError(self, Some(span))
     }
+}
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+#[error(transparent)]
+pub enum ParseError {
+    Data(#[from] ValidateDataError),
+    Date(#[from] ParseDateError),
+    Float(#[from] ParseFloatError),
+    Integer(#[from] ParseIntegerError),
+    Uid(#[from] ParseUidError),
 }

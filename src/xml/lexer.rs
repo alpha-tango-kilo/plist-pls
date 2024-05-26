@@ -139,11 +139,10 @@ macro_rules! gobble_impls {
                 })?;
                 lexer.bump(close_tag_start + $tag.len());
                 let content = &rest[..close_tag_start];
-                // TODO: don't drop the parse error
-                content.parse::<$ty>().map_err(|_| {
+                content.parse::<$ty>().map_err(|err| {
                     let span_start = lexer.span().end + 1;
                     let span_end = span_start + rest.len();
-                    XmlErrorType::CouldNotParse(PlistTag::$pt)
+                    XmlErrorType::CouldNotParse(PlistTag::$pt, err.into())
                         .with_span(span_start..span_end)
                 })
             }
@@ -202,9 +201,9 @@ fn gobble_data<'a>(
     })?;
     lexer.bump(close_tag_start + TAG.len());
     let content = &rest[..close_tag_start];
-    // TODO: keep error
-    Data::new(content, DataEncoding::Base64).map_err(|_| {
-        XmlErrorType::CouldNotParse(PlistTag::Data).with_span(lexer.span())
+    Data::new(content, DataEncoding::Base64).map_err(|err| {
+        XmlErrorType::CouldNotParse(PlistTag::Data, err.into())
+            .with_span(lexer.span())
     })
 }
 
