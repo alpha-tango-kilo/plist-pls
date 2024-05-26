@@ -37,7 +37,8 @@ pub struct XmlParseSourceError<'a> {
 
 impl XmlParseSourceError<'_> {
     /// Access the inner error without the source code and span bundled with it
-    pub fn kind(&self) -> XmlErrorType {
+    #[must_use]
+    pub const fn kind(&self) -> XmlErrorType {
         self.inner
     }
 }

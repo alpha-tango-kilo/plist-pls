@@ -67,7 +67,7 @@ impl<'a> Data<'a> {
                     if !padding_started {
                         match char {
                             'A'..='Z' | 'a'..='z' | '0'..='9' | '+' | '/' => {
-                                data_char_count += 1
+                                data_char_count += 1;
                             },
                             '=' => {
                                 padding_started = true;
@@ -123,6 +123,8 @@ impl<'a> Data<'a> {
     }
 
     /// Decodes the internal data, returning an allocated buffer
+    #[allow(clippy::missing_panics_doc)]
+    #[must_use]
     pub fn decode(&self) -> Vec<u8> {
         match self.encoding {
             DataEncoding::Base64 => {
@@ -139,6 +141,7 @@ impl<'a> Data<'a> {
                 buf
             },
             DataEncoding::Hexadecimal => {
+                #[allow(clippy::cast_possible_truncation)]
                 let parse_hex_char = |hex_char| {
                     let val = match hex_char {
                         '0'..='9' => hex_char as u32 - '0' as u32,
@@ -150,7 +153,7 @@ impl<'a> Data<'a> {
                 };
                 self.inner
                     .chars()
-                    .filter(|c| c.is_ascii_hexdigit())
+                    .filter(char::is_ascii_hexdigit)
                     .tuples()
                     .map(|(upper, lower)| {
                         (parse_hex_char(upper) << 4) + parse_hex_char(lower)

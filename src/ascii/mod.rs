@@ -13,8 +13,6 @@ use logos::{Lexer, Logos};
 
 use crate::{data::DataEncoding, Data, HierarchyTracker};
 
-// TODO: support comments? both // and /* ... */ are allowed
-
 #[derive(Logos, Copy, Clone, Debug, PartialEq)]
 #[logos(skip r"[ \t\r\n\f]+", extras = Extra, error = AsciiError)]
 pub(crate) enum AsciiToken<'a> {

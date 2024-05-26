@@ -36,7 +36,8 @@ pub struct AsciiParseSourceError<'a> {
 
 impl AsciiParseSourceError<'_> {
     /// Access the inner error without the source code and span bundled with it
-    pub fn kind(&self) -> AsciiErrorType {
+    #[must_use]
+    pub const fn kind(&self) -> AsciiErrorType {
         self.inner
     }
 }

@@ -4,6 +4,12 @@
     rustdoc::broken_intra_doc_links
 )]
 #![warn(missing_docs)]
+#![allow(
+    clippy::single_match_else,
+    clippy::module_name_repetitions,
+    clippy::missing_errors_doc,
+    clippy::if_not_else
+)]
 #![doc = include_str!("../README.md")]
 
 use std::{
@@ -104,6 +110,7 @@ impl<'a> Value<'a> {
     }
 
     /// Gets a reference to the held [`Array`], if this value is an array
+    #[must_use]
     pub fn as_array(&self) -> Option<&[Value<'a>]> {
         match &self {
             Value::Array(inner) => Some(inner),
@@ -112,6 +119,7 @@ impl<'a> Value<'a> {
     }
 
     /// Gets the inner [`Array`], if this value is an array
+    #[must_use]
     pub fn into_array(self) -> Option<Array<'a>> {
         match self {
             Value::Array(inner) => Some(inner),
@@ -121,6 +129,7 @@ impl<'a> Value<'a> {
 
     /// Gets a reference to the held [`Dictionary`], if this value is a
     /// dictionary
+    #[must_use]
     pub const fn as_dictionary(&self) -> Option<&Dictionary<'a>> {
         match &self {
             Value::Dictionary(inner) => Some(inner),
@@ -129,6 +138,7 @@ impl<'a> Value<'a> {
     }
 
     /// Gets the inner [`Dictionary`], if this value is a dictionary
+    #[must_use]
     pub fn into_dictionary(self) -> Option<Dictionary<'a>> {
         match self {
             Value::Dictionary(inner) => Some(inner),
@@ -137,6 +147,7 @@ impl<'a> Value<'a> {
     }
 
     /// Gets a copy of the inner boolean, if this value is a boolean
+    #[must_use]
     pub const fn as_boolean(&self) -> Option<bool> {
         match &self {
             Value::Boolean(inner) => Some(*inner),
@@ -145,6 +156,7 @@ impl<'a> Value<'a> {
     }
 
     /// Gets a copy of the inner [`Data`], if this value is data
+    #[must_use]
     pub const fn as_data(&self) -> Option<Data<'a>> {
         match &self {
             Value::Data(inner) => Some(*inner),
@@ -153,6 +165,7 @@ impl<'a> Value<'a> {
     }
 
     /// Gets a copy of the inner [`Date`], if this value is a date
+    #[must_use]
     pub const fn as_date(&self) -> Option<Date> {
         match &self {
             Value::Date(inner) => Some(*inner),
@@ -161,6 +174,7 @@ impl<'a> Value<'a> {
     }
 
     /// Gets a copy of the inner float, if this value is a float
+    #[must_use]
     pub const fn as_float(&self) -> Option<f64> {
         match &self {
             Value::Float(inner) => Some(*inner),
@@ -169,6 +183,7 @@ impl<'a> Value<'a> {
     }
 
     /// Gets a copy of the inner [`Integer`], if this value is an integer
+    #[must_use]
     pub const fn as_integer(&self) -> Option<Integer> {
         match &self {
             Value::Integer(inner) => Some(*inner),
@@ -177,6 +192,7 @@ impl<'a> Value<'a> {
     }
 
     /// Gets a copy of the inner real, if this value is a real one
+    #[must_use]
     pub const fn as_real(&self) -> Option<f64> {
         match &self {
             Value::Real(inner) => Some(*inner),
@@ -185,6 +201,7 @@ impl<'a> Value<'a> {
     }
 
     /// Gets a copy of the inner string, if this value is a string
+    #[must_use]
     pub const fn as_string(&self) -> Option<&str> {
         match &self {
             Value::String(inner) => Some(*inner),
@@ -194,6 +211,7 @@ impl<'a> Value<'a> {
 
     /// Gets a copy of the inner unique identifier, if this value is a unique
     /// identifier
+    #[must_use]
     pub const fn as_uid(&self) -> Option<Uid> {
         match &self {
             Value::Uid(inner) => Some(*inner),
@@ -203,6 +221,7 @@ impl<'a> Value<'a> {
 
     /// Gets a copy of the inner floating point number (but you don't care if
     /// it's a real or a float), if this value is a floating point number
+    #[must_use]
     pub const fn as_float_or_real(&self) -> Option<f64> {
         match &self {
             Value::Float(inner) | Value::Real(inner) => Some(*inner),
@@ -347,6 +366,13 @@ pub struct ParseIntegerError(std::num::ParseIntError);
 impl FromStr for Integer {
     type Err = ParseIntegerError;
 
+    /// Parses an `Integer` from the string slice
+    ///
+    /// If the string starts with "0x", the number is assumed to be a hex
+    /// [`u64`]
+    ///
+    /// Otherwise, parse as an [`i64`], but if that positively overflows,
+    /// [`u64`] instead
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // NetBSD dialect adds the `0x` numeric objects, which are always
         // unsigned. See the `PROP_NUMBER(3)` man page
@@ -431,13 +457,16 @@ macro_rules! plist_array {
 
 type TokenIter<'source, Token> = Peekable<SpannedIter<'source, Token>>;
 
+/// Construct a `Self` by (partially) consuming a [`TokenIter`]
 trait BuildFromLexer<'source, Token>
 where
     Self: Sized,
     Token: logos::Logos<'source>,
 {
+    /// Parsing error
     type Error;
 
+    /// Try and construct a `Self` by (partially) consuming a [`TokenIter`]
     fn build_from_tokens(
         token_iter: &mut TokenIter<'source, Token>,
     ) -> Result<Self, Self::Error>;
@@ -511,11 +540,11 @@ impl HierarchyTracker {
     const MAX_DEPTH: u8 = 58;
     const STACK_MASK: u64 = !Self::DEPTH_MASK;
 
-    const fn stack(&self) -> u64 {
+    const fn stack(self) -> u64 {
         self.0 & Self::STACK_MASK
     }
 
-    const fn depth(&self) -> u8 {
+    const fn depth(self) -> u8 {
         // Keep last 6 bits
         (self.0 & Self::DEPTH_MASK) as u8
     }
@@ -526,7 +555,7 @@ impl HierarchyTracker {
             // Push all the stack bits left
             let stack = self.stack() << 1;
             // Add depth + 1 to get new depth
-            self.0 = stack + depth as u64 + 1;
+            self.0 = stack + u64::from(depth) + 1;
             Ok(())
         } else {
             Err(CollectionError::WeAreInTooDeep)
@@ -541,7 +570,7 @@ impl HierarchyTracker {
             // Put a dictionary on the top of the stack
             let stack = stack | Self::DICTIONARY_MASK;
             // Add depth + 1 to get new depth
-            self.0 = stack + depth as u64 + 1;
+            self.0 = stack + u64::from(depth) + 1;
             Ok(())
         } else {
             Err(CollectionError::WeAreInTooDeep)
@@ -556,7 +585,7 @@ impl HierarchyTracker {
                 // We don't have to unset the array bit (since array **is**
                 // unset), so just rshift the stack
                 let stack = self.stack() >> 1;
-                self.0 = stack + depth as u64 - 1;
+                self.0 = stack + u64::from(depth) - 1;
                 Ok(())
             } else {
                 Err(CollectionError::OpenDictionaryCloseArray)
@@ -574,7 +603,7 @@ impl HierarchyTracker {
             if is_dictionary {
                 // Unset the dictionary bit and shift right
                 let stack = (self.stack() ^ Self::DICTIONARY_MASK) >> 1;
-                self.0 = stack + depth as u64 - 1;
+                self.0 = stack + u64::from(depth) - 1;
                 Ok(())
             } else {
                 Err(CollectionError::OpenArrayCloseDictionary)

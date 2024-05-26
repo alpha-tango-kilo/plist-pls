@@ -30,18 +30,21 @@ impl<'a> Dictionary<'a> {
             /// present, else `None`
             ///
             /// Computes in **O(1)** time (average)
+            #[must_use]
             pub fn get(&self, key: &str) -> Option<&Value<'a>>;
 
             /// Return `true` if an equivalent to `key` exists in the map
             ///
             /// Computes in **O(1)** time (average)
+            #[must_use]
             pub fn contains_key(&self, key: &str) -> bool;
 
             /// Returns a mutable reference to the value stored for `key`, if it is
             /// present, else `None`
             ///
             /// Computes in **O(1)** time (average)
-            pub fn get_mut(&mut self, key: &str);
+            #[must_use]
+            pub fn get_mut(&mut self, key: &str) -> Option<&mut Value<'a>>;
 
             /// Insert a key-value pair in the map
             ///
@@ -99,11 +102,13 @@ impl<'a> Dictionary<'a> {
             /// Return the number of key-value pairs in the map
             ///
             /// Computes in **O(1)** time
+            #[must_use]
             pub fn len(&self) -> usize;
 
             /// Returns true if the map contains no elements
             ///
             /// Computes in **O(1)** time
+            #[must_use]
             pub fn is_empty(&self) -> bool;
 
             // Where are keys & iter(_mut)? Manually impl'd, as the keys are
@@ -124,6 +129,7 @@ impl<'a> Dictionary<'a> {
 
     /// Makes a new empty `Dictionary`
     #[inline]
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -133,6 +139,7 @@ impl<'a> Dictionary<'a> {
     ///
     /// Computes in **O(n)** time
     #[inline]
+    #[must_use]
     pub fn with_capacity(n: usize) -> Self {
         Dictionary(IndexMap::with_capacity(n))
     }
