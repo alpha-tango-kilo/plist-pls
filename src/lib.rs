@@ -459,6 +459,16 @@ trait TokenIterValueExt<'a> {
     ) -> Result<Self::Output, Self::Error>;
 }
 
+/// Extra methods I'm adding to token iterators (well, it could be any iterator,
+/// but that's what I'm using it for)
+trait TokenIterExt
+where
+    Self: Iterator,
+{
+    /// Get the next token that's not a comment
+    fn next_skip_comments(&mut self) -> Option<Self::Item>;
+}
+
 /// An issue with opening/closing collections
 #[derive(Debug, Error, Copy, Clone, PartialEq, Eq)]
 pub enum CollectionError {
@@ -496,7 +506,7 @@ pub(crate) struct HierarchyTracker(u64);
 
 impl HierarchyTracker {
     const COUNT_BITS: u8 = 6;
-    const DEPTH_MASK: u64 = 0b0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0011_1111;
+    const DEPTH_MASK: u64      = 0b0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0011_1111;
     const DICTIONARY_MASK: u64 = 0b0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0100_0000;
     const MAX_DEPTH: u8 = 58;
     const STACK_MASK: u64 = !Self::DEPTH_MASK;

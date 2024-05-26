@@ -7,8 +7,8 @@ use crate::{
         errors::{AsciiError, AsciiParseSourceError},
         AsciiErrorType, AsciiToken,
     },
-    Array, BuildFromLexer, Dictionary, Integer, TokenIter, TokenIterValueExt,
-    Value,
+    Array, BuildFromLexer, Dictionary, Integer, TokenIter, TokenIterExt,
+    TokenIterValueExt, Value,
 };
 
 fn parse_primitive(primitive: &str) -> Value {
@@ -29,7 +29,7 @@ impl<'a> BuildFromLexer<'a, AsciiToken<'a>> for Value<'a> {
         token_iter: &mut TokenIter<'a, AsciiToken<'a>>,
     ) -> Result<Self, Self::Error> {
         let (first, span) = token_iter
-            .next()
+            .next_skip_comments()
             .ok_or(AsciiError::new(AsciiErrorType::ExpectedEnd))?;
         match first? {
             AsciiToken::StartArray => {
@@ -41,7 +41,9 @@ impl<'a> BuildFromLexer<'a, AsciiToken<'a>> for Value<'a> {
             AsciiToken::QuotedString(value) => Ok(value.into()),
             AsciiToken::Data(value) => Ok(value.into()),
             AsciiToken::Primitive(something) => Ok(parse_primitive(something)),
-            AsciiToken::Comment(_) => todo!("skip/ignore"),
+            AsciiToken::Comment(_) => unreachable!(
+                "got comment despite calling token_iter.next_skip_comments()"
+            ),
             // Uuuh actually no
             AsciiToken::EndArray
             | AsciiToken::EndDictionary
@@ -65,7 +67,7 @@ impl<'a> BuildFromLexer<'a, AsciiToken<'a>> for Dictionary<'a> {
         let mut dict = Dictionary::new();
         loop {
             let (token, span) = token_iter
-                .next()
+                .next_skip_comments()
                 .ok_or(AsciiError::new(AsciiErrorType::UnexpectedEnd))?;
             let key = match token? {
                 AsciiToken::QuotedString(key) | AsciiToken::Primitive(key) => {
@@ -77,7 +79,7 @@ impl<'a> BuildFromLexer<'a, AsciiToken<'a>> for Dictionary<'a> {
             };
 
             let (token, span) = token_iter
-                .next()
+                .next_skip_comments()
                 .ok_or(AsciiError::new(AsciiErrorType::UnexpectedEnd))?;
             if !matches!(token?, AsciiToken::KeyAssign) {
                 return Err(AsciiErrorType::MissingKeyAssign.with_span(span));
@@ -87,7 +89,7 @@ impl<'a> BuildFromLexer<'a, AsciiToken<'a>> for Dictionary<'a> {
             dict.insert(key, value);
 
             let (token, span) = token_iter
-                .next()
+                .next_skip_comments()
                 .ok_or(AsciiError::new(AsciiErrorType::UnexpectedEnd))?;
             match token? {
                 AsciiToken::DictEntrySeparator => {},
@@ -116,6 +118,10 @@ impl<'a> BuildFromLexer<'a, AsciiToken<'a>> for Array<'a> {
                 .ok_or(AsciiError::new(AsciiErrorType::UnexpectedEnd))?;
             match peeked_token_res {
                 // Edge case: empty array
+                Ok(AsciiToken::Comment(_)) => {
+                    token_iter.next();
+                    continue;
+                },
                 Ok(AsciiToken::EndArray) => {
                     token_iter.next();
                     return Ok(array);
@@ -138,7 +144,7 @@ impl<'a> BuildFromLexer<'a, AsciiToken<'a>> for Array<'a> {
             }
 
             let (token, span) = token_iter
-                .next()
+                .next_skip_comments()
                 .ok_or(AsciiError::new(AsciiErrorType::UnexpectedEnd))?;
             match token? {
                 AsciiToken::ArrayEntrySeparator => {},
@@ -184,5 +190,14 @@ impl<'a> TokenIterValueExt<'a>
         })?;
         let value = value.map_err(|err| err.with_source(source))?;
         Ok((value, span))
+    }
+}
+
+impl<'a> TokenIterExt for TokenIter<'a, AsciiToken<'a>> {
+    fn next_skip_comments(&mut self) -> Option<Self::Item> {
+        match self.next() {
+            Some((Ok(AsciiToken::Comment(_)), _)) => self.next_skip_comments(),
+            anything_else => anything_else,
+        }
     }
 }

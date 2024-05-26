@@ -7,7 +7,7 @@ use logos::{Lexer, Logos};
 use regex_lite::Regex;
 
 pub(crate) use crate::xml::{errors::XmlError, lexer::XmlToken};
-use crate::{BuildFromLexer, TokenIterValueExt, Value};
+use crate::{BuildFromLexer, TokenIterExt, TokenIterValueExt, Value};
 
 /// A complete XML plist document
 ///
@@ -58,7 +58,7 @@ impl<'a> XmlDocument<'a> {
         }
 
         let (plist_version_token, plist_version_span) =
-            token_iter.next().map_err_to_src(source)?;
+            token_iter.next_skip_comments().map_err_to_src(source)?;
         let XmlToken::PlistHeader(plist_version) = plist_version_token else {
             return Err(XmlErrorType::MissingHeader
                 .with_span(plist_version_span)
@@ -69,7 +69,7 @@ impl<'a> XmlDocument<'a> {
             Value::build_from_tokens(&mut token_iter).map_err_to_src(source)?;
 
         let (plist_end_token, end_plist_span) =
-            token_iter.next().map_err_to_src(source)?;
+            token_iter.next_skip_comments().map_err_to_src(source)?;
         if !matches!(plist_end_token, XmlToken::EndPlist) {
             return Err(XmlErrorType::ExpectedEnd
                 .with_span(end_plist_span)

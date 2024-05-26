@@ -220,7 +220,7 @@ fn gobble_comment<'a>(
             .with_span(span_start..span_end)
     })?;
     lexer.bump(close_start + CLOSE.len());
-    Ok(&rest[..close_start])
+    Ok(rest[..close_start].trim())
 }
 
 macro_rules! weird_empty_impls {
@@ -345,6 +345,7 @@ mod unit_tests {
             XmlToken::DocTypeHeader,
             XmlToken::PlistHeader("1.0"),
             XmlToken::StartDictionary,
+            XmlToken::Comment("comment wow"),
             XmlToken::Key("Author"),
             XmlToken::String("William Shakespeare"),
             XmlToken::Key("Lines"),

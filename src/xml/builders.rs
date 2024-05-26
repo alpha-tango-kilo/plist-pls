@@ -2,7 +2,8 @@ use logos::Span;
 
 use crate::{
     xml::{XmlError, XmlErrorType, XmlParseSourceError, XmlToken},
-    Array, BuildFromLexer, Dictionary, TokenIter, TokenIterValueExt, Value,
+    Array, BuildFromLexer, Dictionary, TokenIter, TokenIterExt,
+    TokenIterValueExt, Value,
 };
 
 impl<'a> BuildFromLexer<'a, XmlToken<'a>> for Value<'a> {
@@ -12,7 +13,7 @@ impl<'a> BuildFromLexer<'a, XmlToken<'a>> for Value<'a> {
         token_iter: &mut TokenIter<'a, XmlToken<'a>>,
     ) -> Result<Self, Self::Error> {
         let (first, span) = token_iter
-            .next()
+            .next_skip_comments()
             .ok_or(XmlError::new(XmlErrorType::UnexpectedEnd))?;
         let first = first?;
         match first {
@@ -34,7 +35,9 @@ impl<'a> BuildFromLexer<'a, XmlToken<'a>> for Value<'a> {
             XmlToken::Real(value) => Ok(Value::Real(value)),
             XmlToken::String(value) => Ok(value.into()),
             XmlToken::Uid(value) => Ok(value.into()),
-            XmlToken::Comment(_) => todo!("skip/ignore"),
+            XmlToken::Comment(_) => unreachable!(
+                "got comment despite calling token_iter.next_skip_comments()"
+            ),
             // "Why is this here you weirdo?"
             XmlToken::XmlHeader(_)
             | XmlToken::DocTypeHeader
@@ -60,7 +63,7 @@ impl<'a> BuildFromLexer<'a, XmlToken<'a>> for Dictionary<'a> {
         let mut dict = Dictionary::new();
         loop {
             let (token, span) = token_iter
-                .next()
+                .next_skip_comments()
                 .ok_or(XmlError::new(XmlErrorType::UnexpectedEnd))?;
             let token = token?;
             let key = match token {
@@ -88,6 +91,10 @@ impl<'a> BuildFromLexer<'a, XmlToken<'a>> for Array<'a> {
                 .peek()
                 .ok_or(XmlError::new(XmlErrorType::UnexpectedEnd))?;
             match peeked_token_res {
+                Ok(XmlToken::Comment(_)) => {
+                    token_iter.next();
+                    continue;
+                },
                 Ok(XmlToken::EndArray) => {
                     token_iter.next();
                     return Ok(array);
@@ -143,5 +150,14 @@ impl<'a> TokenIterValueExt<'a>
         })?;
         let value = value.map_err(|err| err.with_source(source))?;
         Ok((value, span))
+    }
+}
+
+impl<'a> TokenIterExt for TokenIter<'a, XmlToken<'a>> {
+    fn next_skip_comments(&mut self) -> Option<Self::Item> {
+        match self.next() {
+            Some((Ok(XmlToken::Comment(_)), _)) => self.next_skip_comments(),
+            anything_else => anything_else,
+        }
     }
 }

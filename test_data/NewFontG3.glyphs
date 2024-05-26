@@ -16,8 +16,11 @@ over = -16;
 },
 {
 over = -16;
-pos = -200;
+pos = -200; // comment
 }
+/* this is
+a multiline comment
+*/
 );
 name = Regular;
 }
