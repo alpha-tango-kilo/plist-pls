@@ -24,7 +24,6 @@ time = { version = "0.3", features = ["formatting", "parsing"] }
 
 [dependencies.derive_more]
 version = "=1.0.0-beta.6"
-path = "../derive_more"
 features = [
     "display",
     "index",
@@ -35,3 +34,9 @@ features = [
 
 [dev-dependencies]
 miette = { version = "*", features = ["fancy"] }
+
+# Fixes IsVariant documentation (see Value)
+# FIXME: remove once released on crates.io
+[patch.crates-io.derive_more]
+git = "https://github.com/JelteF/derive_more"
+rev = "f5a9199d573e0da5c076057e51427ab75ad4e50d"
