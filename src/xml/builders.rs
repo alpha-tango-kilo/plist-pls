@@ -155,9 +155,11 @@ impl<'a> TokenIterValueExt<'a>
 
 impl<'a> TokenIterExt for TokenIter<'a, XmlToken<'a>> {
     fn next_skip_comments(&mut self) -> Option<Self::Item> {
-        match self.next() {
-            Some((Ok(XmlToken::Comment(_)), _)) => self.next_skip_comments(),
-            anything_else => anything_else,
+        loop {
+            match self.next() {
+                Some((Ok(XmlToken::Comment(_)), _)) => {},
+                anything_else => return anything_else,
+            }
         }
     }
 }
