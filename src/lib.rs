@@ -13,7 +13,8 @@
 #![doc = include_str!("../README.md")]
 
 use std::{
-    fmt, iter::Peekable, num::IntErrorKind, str::FromStr, time::SystemTime,
+    fmt, fs::OpenOptions, io, iter::Peekable, num::IntErrorKind, str::FromStr,
+    time::SystemTime,
 };
 
 pub use data::Data;
@@ -27,7 +28,7 @@ use time::{
 pub use crate::dictionary::Dictionary;
 use crate::{
     ascii::{AsciiErrorType, AsciiParseSourceError, AsciiToken},
-    xml::{XmlErrorType, XmlParseSourceError, XmlToken},
+    xml::{XmlErrorType, XmlParseSourceError, XmlToken, XmlWriter},
 };
 
 /// Contains [`Data`] and its associated types
@@ -227,6 +228,33 @@ impl<'a> Value<'a> {
             Value::Float(inner) | Value::Real(inner) => Some(*inner),
             _ => None,
         }
+    }
+
+    #[allow(missing_docs)]
+    pub fn write_xml_to<W: io::Write>(&self, writeable: W) -> io::Result<()> {
+        let mut writer = XmlWriter::from(writeable);
+        writer.write_value(self)
+    }
+
+    #[allow(missing_docs)]
+    pub fn write_xml_file(&self, path: &str) {
+        let file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(path)
+            .unwrap();
+        let mut writer = XmlWriter::from(file);
+        writer.write_value(self).expect("wrote it");
+    }
+
+    #[allow(missing_docs)]
+    pub fn write_xml_string(&self) -> String {
+        let mut buf = Vec::new();
+        let mut writer = XmlWriter::from(&mut buf);
+        writer.write_value(self).unwrap();
+        // SAFETY: XmlWriter never writes invalid UTF-8
+        unsafe { String::from_utf8_unchecked(buf) }
     }
 }
 
@@ -470,6 +498,43 @@ where
     fn build_from_tokens(
         token_iter: &mut TokenIter<'source, Token>,
     ) -> Result<Self, Self::Error>;
+}
+
+#[cfg(feature = "write")]
+trait PlistWrite {
+    fn write_value(&mut self, value: &Value) -> std::io::Result<()> {
+        match value {
+            Value::Array(value) => self.write_array(value),
+            Value::Dictionary(value) => self.write_dictionary(value),
+            Value::Boolean(value) => self.write_bool(*value),
+            Value::Data(value) => self.write_data(*value),
+            Value::Date(value) => self.write_date(*value),
+            Value::Float(value) => self.write_float(*value),
+            Value::Integer(value) => self.write_integer(*value),
+            Value::Real(value) => self.write_real(*value),
+            Value::String(value) => self.write_string(value),
+            Value::Uid(value) => self.write_uid(*value),
+        }
+    }
+
+    fn write_bool(&mut self, boolean: bool) -> std::io::Result<()>;
+
+    fn write_array(&mut self, array: &Array) -> std::io::Result<()>;
+
+    fn write_dictionary(&mut self, dict: &Dictionary) -> std::io::Result<()>;
+
+    fn write_data(&mut self, _data: Data) -> std::io::Result<()>;
+
+    fn write_date(&mut self, _date: Date) -> std::io::Result<()>;
+
+    fn write_float(&mut self, float: f64) -> std::io::Result<()>;
+
+    fn write_integer(&mut self, int: Integer) -> std::io::Result<()>;
+    fn write_real(&mut self, real: f64) -> std::io::Result<()>;
+
+    fn write_string(&mut self, string: &str) -> std::io::Result<()>;
+
+    fn write_uid(&mut self, uid: Uid) -> std::io::Result<()>;
 }
 
 /// A trait to allow for the implementation of convenience methods on token

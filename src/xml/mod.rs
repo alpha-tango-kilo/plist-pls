@@ -1,12 +1,17 @@
 mod builders;
 mod errors;
 mod lexer;
+#[cfg(feature = "write")]
+mod writer;
 
+pub(crate) use errors::XmlError;
 pub use errors::{XmlErrorType, XmlParseSourceError};
+pub(crate) use lexer::XmlToken;
 use logos::{Lexer, Logos};
 use regex_lite::Regex;
+#[cfg(feature = "write")]
+pub(crate) use writer::XmlWriter;
 
-pub(crate) use crate::xml::{errors::XmlError, lexer::XmlToken};
 use crate::{BuildFromLexer, TokenIterExt, TokenIterValueExt, Value};
 
 /// A complete XML plist document

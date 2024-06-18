@@ -13,16 +13,22 @@ exclude = [
     "test_data",
 ]
 
+[features]
+default = ["write"]
+write = ["dep:itoa", "dep:ryu"]
+
 [dependencies]
 base64 = "0.22"
 delegate = "0.12"
 indexmap = "2.2"
 iter-read = "1"
 itertools = "0.13.0"
+itoa = { version = "1", optional = true }
 logos = "0.14"
 miette = "7.2"
 paste = "1"
 regex-lite = "0.1.5"
+ryu = { version = "1", optional = true }
 thiserror = "1"
 time = { version = "0.3", features = ["formatting", "parsing"] }
 
