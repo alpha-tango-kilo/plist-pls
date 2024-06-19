@@ -11,8 +11,7 @@ pub(crate) struct XmlWriter<W> {
 impl<W: io::Write> PlistWrite for XmlWriter<W> {
     fn write_bool(&mut self, boolean: bool) -> io::Result<()> {
         let xml = if boolean { "<true/>" } else { "<false/>" };
-        self.sink.write_all(xml.as_bytes())?;
-        Ok(())
+        self.sink.write_all(xml.as_bytes())
     }
 
     fn write_array(&mut self, array: &Array) -> io::Result<()> {

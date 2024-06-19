@@ -230,13 +230,16 @@ impl<'a> Value<'a> {
         }
     }
 
+    // TODO: doc these & make code production ready
     #[allow(missing_docs)]
+    #[cfg(feature = "write")]
     pub fn write_xml_to<W: io::Write>(&self, writeable: W) -> io::Result<()> {
         let mut writer = XmlWriter::from(writeable);
         writer.write_value(self)
     }
 
     #[allow(missing_docs)]
+    #[cfg(feature = "write")]
     pub fn write_xml_file(&self, path: &str) {
         let file = OpenOptions::new()
             .write(true)
@@ -249,6 +252,7 @@ impl<'a> Value<'a> {
     }
 
     #[allow(missing_docs)]
+    #[cfg(feature = "write")]
     pub fn write_xml_string(&self) -> String {
         let mut buf = Vec::new();
         let mut writer = XmlWriter::from(&mut buf);
@@ -518,22 +522,14 @@ trait PlistWrite {
     }
 
     fn write_bool(&mut self, boolean: bool) -> std::io::Result<()>;
-
     fn write_array(&mut self, array: &Array) -> std::io::Result<()>;
-
     fn write_dictionary(&mut self, dict: &Dictionary) -> std::io::Result<()>;
-
-    fn write_data(&mut self, _data: Data) -> std::io::Result<()>;
-
-    fn write_date(&mut self, _date: Date) -> std::io::Result<()>;
-
+    fn write_data(&mut self, data: Data) -> std::io::Result<()>;
+    fn write_date(&mut self, date: Date) -> std::io::Result<()>;
     fn write_float(&mut self, float: f64) -> std::io::Result<()>;
-
     fn write_integer(&mut self, int: Integer) -> std::io::Result<()>;
     fn write_real(&mut self, real: f64) -> std::io::Result<()>;
-
     fn write_string(&mut self, string: &str) -> std::io::Result<()>;
-
     fn write_uid(&mut self, uid: Uid) -> std::io::Result<()>;
 }
 
